@@ -96,11 +96,9 @@ void TcpServer::loop() {
 }
 
 void TcpServer::handle_wakeup() {
-  ThreadPool::instance().add([this]() {
-    uint64_t one = 1;
-    ::read(evfd_, &one, sizeof(one));
-    quit_ = true;
-  });
+  uint64_t one = 1;
+  ::read(evfd_, &one, sizeof(one));
+  quit_ = true;
 }
 
 void TcpServer::handle_timeout() { tq_.handle_timeout(); }
