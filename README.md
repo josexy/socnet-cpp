@@ -153,6 +153,6 @@ wrk -c 100 -t 4 -d 10s http://127.0.0.1:5555/
 webbench -t 10 -c 100 http://127.0.0.1:5555/
 ```
 
-![socnet_wrk](screentshots/socnet_wrk.jpg)
+![socnet_wrk](https://github.com/josexy/socnet-cpp/blob/main/screenshots/socnet_wrk.jpg)
 
-![socnet_webbench](screentshots/socnet_webbench.jpg)
+![socnet_webbench](https://github.com/josexy/socnet-cpp/blob/main/screenshots/socnet_webbench.jpg)
