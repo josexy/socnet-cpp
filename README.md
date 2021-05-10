@@ -19,6 +19,15 @@ A high performance HTTP server based on linux epoll designed by C++ 20
 - ...
 
 ## Quick start
+```bash
+git clone https://github.com/josexy/socnet-cpp.git
+cd socnet-cpp/build
+cmake ..
+make
+./socnet
+```
+
+简单快速例子：
 ```cpp
 #include "soc/http/include/HttpServer.h"
 #include <signal.h>
