@@ -1,8 +1,7 @@
 #include "../include/HttpMultiPart.h"
 
-#include <string.h>
-
 #include "../include/HttpUtil.h"
+#include <string.h>
 
 using namespace soc::http;
 
@@ -13,9 +12,10 @@ auto HttpMultiPart::get(const std::string &name) const
   return std::nullopt;
 }
 
-auto HttpMultiPart::file(const std::string &name) const -> std::optional<Part> {
+auto HttpMultiPart::file(const std::string &name) const
+    -> std::optional<const std::reference_wrapper<const Part>> {
   if (auto it = files_.find(name); it != files_.end())
-    return std::make_optional(it->second);
+    return std::optional<const std::reference_wrapper<const Part>>(it->second);
   return std::nullopt;
 }
 
