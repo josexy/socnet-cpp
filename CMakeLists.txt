@@ -9,7 +9,8 @@ aux_source_directory(soc/http/src HTTP_SRC_FILES)
 aux_source_directory(soc/utility/src UTILITY_SRC_FILES)
 
 add_executable(socnet
-        test/simple-server-full.cc
+        test/simple-server-upload.cc
+        # test/simple-server-full.cc
         # test/simple-server.cc
 
         ${LIBJSON_SRC_FILES}
