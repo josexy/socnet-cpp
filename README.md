@@ -140,3 +140,19 @@ echo -n "admin:socnet@test:admin"|md5sum
 echo -n "guest:socnet@test:guest"|md5sum
 echo -n "user1:socnet@test:12345"|md5sum
 ```
+
+## 压力测试
+测试环境
+- Linux Manjaro 5.10
+- CPU: i5-8265U 8核
+- 内存: 8G
+- 测试工具 wrk, webbench
+
+```bash
+wrk -c 100 -t 4 -d 10s http://127.0.0.1:5555/
+webbench -t 10 -c 100 http://127.0.0.1:5555/
+```
+
+![socnet_wrk](screentshots/socnet_wrk.jpg)
+
+![socnet_webbench](screentshots/socnet_webbench.jpg)
