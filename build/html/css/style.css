@@ -1,0 +1,137 @@
+body{
+    margin:  0;
+    padding: 0;
+}
+
+li a{
+    padding: 10px;
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 18px;
+    color: greenyellow;
+    transition: all 0.4s ease;
+}
+li a:hover{
+    background-color: #3f3c3e;
+}
+ul{
+    overflow: auto;
+    position: fixed;
+    background-color: #292727;
+    margin:0;
+    padding: 0;
+    list-style-type: none;
+    width: 20%;
+    height: 100%;
+}
+.div_main{
+    height: 100%;
+    margin-left: 20%;
+    padding: 10px 10px;
+}
+
+
+.dropbtn {
+    border-radius: 5px;
+    width: 150px;
+    background-color: #4CAF50;
+    color: white;
+    padding: 16px;
+    font-size: 16px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.4s ease;
+}
+.dropdown {
+    position: relative;
+    display: inline-block;
+
+}
+
+.dropdown-content {
+
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+
+}
+.dropdown-content a {
+    text-align: center;
+    transition: all 0.4s ease;
+    color: black;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+}
+
+.dropdown-content a:hover {
+    background-color: #b7bfc1;
+}
+
+.dropdown:hover .dropbtn {
+    background-color: #3e8e41;
+}
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+
+div .login_panel{
+    border: 1px Background solid;
+    padding: 50px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2)
+}
+.login_btn{
+    cursor: pointer;
+    color: white;
+    font-size: large;
+    font-weight: bold;
+    margin-top: 5px;
+    outline: none;
+    height: 50px;
+    width: 100%;
+    border-radius: 6px;
+    border: none;
+    transition: all 0.4s ease;
+    background-color: #4b4b4b;
+}
+.login_btn:hover{
+    background-color: #292727;
+}
+.login_text{
+    width: 100%;
+    transition: all 0.5s ease;
+    padding: 4px;
+    text-decoration: none;
+    color: Background;
+    font-weight: bold;
+    font-size: 18px;
+    border: 2px #b7bfc1 solid;
+    outline: none;
+    margin-bottom: 2px;
+}
+.login_text:hover{
+    border:2px #292727 solid;
+}
+
+h1{
+    text-shadow: 5px 5px 5px gray;
+}
+
+.div_tran{
+    background-color: #3f3c3e;
+    width: 200px;
+    height: 200px;
+    transform: rotate(45deg);
+
+    transition-duration: 0.4s;
+    /*transition: all 0.4s ease;*/
+}
+.div_tran:hover{
+    transform: rotate(180deg);
+    transform: scale(0.5);
+
+}
