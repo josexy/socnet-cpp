@@ -20,7 +20,7 @@ public:
   void set_boundary(const std::string &boundary) noexcept { bd_ = boundary; }
   const std::string &boundary() const noexcept { return bd_; }
   std::optional<std::string> get(const std::string &name) const;
-  std::optional<const std::reference_wrapper<const Part>>
+  std::optional<const std::reference_wrapper<const std::vector<Part>>>
   file(const std::string &name) const;
 
   void parse(const std::string_view &body);
@@ -41,7 +41,7 @@ private:
 
   std::string bd_;
   std::unordered_map<std::string, std::string> form_;
-  std::unordered_map<std::string, Part> files_;
+  std::unordered_map<std::string, std::vector<Part>> files_;
 
   inline constexpr static char CR = '\r';
   inline constexpr static char LF = '\n';

@@ -13,9 +13,11 @@ auto HttpMultiPart::get(const std::string &name) const
 }
 
 auto HttpMultiPart::file(const std::string &name) const
-    -> std::optional<const std::reference_wrapper<const Part>> {
-  if (auto it = files_.find(name); it != files_.end())
-    return std::optional<const std::reference_wrapper<const Part>>(it->second);
+    -> std::optional<const std::reference_wrapper<const std::vector<Part>>> {
+  if (auto it = files_.find(name); it != files_.end()) {
+    return std::optional<const std::reference_wrapper<const std::vector<Part>>>(
+        it->second);
+  }
   return std::nullopt;
 }
 
@@ -152,7 +154,12 @@ void HttpMultiPart::parse(const std::string_view &body) {
       if (!file_mark) // form
         form_.emplace(name, form_file_data);
       else { // file
-        files_.emplace(name, Part{name, filename, type, form_file_data});
+        if (auto x = files_.find(name); x != files_.end()) {
+          x->second.emplace_back(name, filename, type, form_file_data);
+        } else {
+          files_.emplace(name, std::move(std::vector{Part{name, filename, type,
+                                                          form_file_data}}));
+        }
       }
       name = filename = type = form_file_data = "";
       file_mark = false;
