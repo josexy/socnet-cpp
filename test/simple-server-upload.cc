@@ -17,23 +17,24 @@ int main() {
   std::string save_fir_dir = "upload_files/";
   mkdir(save_fir_dir.c_str(), 0755);
 
-  auto do_work = [&](const HttpMultiPart::Part &x) {
-    LOG_INFO("filename: %s, filetype: %s", x.file_name.c_str(),
-             x.file_type.c_str());
-
-    if (x.data_str.size() > max_limit_file_size) {
-      LOG_ERROR("%s", "file size limit 10M!");
-      return false;
-    } else {
-      if (!x.file_name.empty()) {
-        std::ofstream ofs(save_fir_dir + x.file_name,
-                          std::ios_base::binary | std::ios_base::out);
-        ofs.write(x.data_str.data(), x.data_str.size());
-        ofs.close();
-        LOG_INFO("%s", "save file successfully!");
+  auto do_work = [&](const std::vector<HttpMultiPart::Part> &parts) {
+    for (auto &x : parts) {
+      LOG_INFO("filename: %s, filetype: %s", x.file_name.c_str(),
+               x.file_type.c_str());
+      if (x.data_str.size() > max_limit_file_size) {
+        LOG_ERROR("%s", "file size limit 10M!");
+        return false;
+      } else {
+        if (!x.file_name.empty()) {
+          std::ofstream ofs(save_fir_dir + x.file_name,
+                            std::ios_base::binary | std::ios_base::out);
+          ofs.write(x.data_str.data(), x.data_str.size());
+          ofs.close();
+          LOG_INFO("%s", "save file successfully!");
+        }
       }
-      return true;
     }
+    return true;
   };
 
   app.route("/post", [&](const auto &req, auto &resp) {
