@@ -1,6 +1,7 @@
 #ifndef SOC_UTILITY_ENCODEUTIL_H
 #define SOC_UTILITY_ENCODEUTIL_H
 
+#include "../../net/include/Buffer.h"
 #include <functional>
 #include <string>
 
@@ -11,7 +12,7 @@ class Buffer;
 
 struct EncodeUtil {
   // Gzip compress algorithm for http response body
-  static void gzipcompress(void *in_data, size_t in_data_size, net::Buffer *buf,
+  static void gzipcompress(net::Buffer *tmp, net::Buffer *buf,
                            const std::function<void(size_t)> &f,
                            const std::function<void()> &g);
 

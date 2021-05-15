@@ -7,57 +7,42 @@
 #include <string.h>
 #include <zlib.h>
 
-#include "../../net/include/Buffer.h"
 using namespace soc;
 
-void EncodeUtil::gzipcompress(void *in_data, size_t in_data_size,
-                              net::Buffer *buf,
+void EncodeUtil::gzipcompress(net::Buffer *tmp, net::Buffer *buf,
                               const std::function<void(size_t)> &f,
                               const std::function<void()> &g) {
-  std::vector<uint8_t> buffer;
-
-  const size_t BUFSIZE = 128 * 1024;
-  uint8_t temp_buffer[BUFSIZE];
-
+  std::vector<uint8_t> output;
+  size_t size = tmp->readable();
   z_stream strm;
-  strm.zalloc = 0;
-  strm.zfree = 0;
-  strm.next_in = reinterpret_cast<uint8_t *>(in_data);
-  strm.avail_in = in_data_size;
-  strm.next_out = temp_buffer;
-  strm.avail_out = BUFSIZE;
+  ::memset(&strm, 0, sizeof(strm));
 
-  int windowsBits = 15;
-  int GZIP_ENCODING = 16;
-  deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-               windowsBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
+  deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 31, 8,
+               Z_DEFAULT_STRATEGY);
 
-  while (strm.avail_in != 0) {
-    ::deflate(&strm, Z_NO_FLUSH);
-    if (strm.avail_out == 0) {
-      buffer.insert(buffer.end(), temp_buffer, temp_buffer + BUFSIZE);
-      strm.next_out = temp_buffer;
-      strm.avail_out = BUFSIZE;
+  strm.next_in = reinterpret_cast<z_const Bytef *>((void *)tmp->peek());
+  strm.avail_in = static_cast<uint32_t>(size);
+
+  std::size_t size_compressed = 0;
+  do {
+    size_t increase = size / 2 + 1024;
+    if (output.size() < (size_compressed + increase)) {
+      output.resize(size_compressed + increase);
     }
-  }
+    strm.avail_out = static_cast<unsigned int>(increase);
+    strm.next_out =
+        reinterpret_cast<Bytef *>((output.data() + size_compressed));
 
-  int deflate_res = Z_OK;
-  while (deflate_res == Z_OK) {
-    if (strm.avail_out == 0) {
-      buffer.insert(buffer.end(), temp_buffer, temp_buffer + BUFSIZE);
-      strm.next_out = temp_buffer;
-      strm.avail_out = BUFSIZE;
-    }
-    deflate_res = ::deflate(&strm, Z_FINISH);
-  }
+    ::deflate(&strm, Z_FINISH);
+    size_compressed += (increase - strm.avail_out);
+  } while (strm.avail_out == 0);
 
-  buffer.insert(buffer.end(), temp_buffer,
-                temp_buffer + BUFSIZE - strm.avail_out);
   ::deflateEnd(&strm);
+  output.resize(size_compressed);
 
-  f(buffer.size());
+  f(output.size());
   g();
-  buf->append<uint8_t>(buffer.begin(), buffer.end());
+  buf->append<uint8_t>(output.begin(), output.end());
 }
 
 unsigned char *EncodeUtil::md5_hash(void *data, size_t n,
