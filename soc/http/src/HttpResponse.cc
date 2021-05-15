@@ -7,12 +7,14 @@ using namespace soc::http;
 
 HttpResponseBuilder::HttpResponseBuilder(HttpRequest *request,
                                          net::Buffer *sender)
-    : uri_(request->url()), version_(request->version()),
+    : uri_(request->url()), version_(request->version()), resp_file_(false),
       close_(request->close_conn()), compressed_(request->compressed()),
       status_code_(200), sender_(sender) {
   header_.add("Server", "socnet");
   header_.add("Content-Type", "text/plain; charset=utf-8");
   header_.add("Date", soc::timestamp::server_date());
+
+  tmp_buffer_.retired_all();
 }
 
 HttpResponseBuilder &HttpResponseBuilder::auth(HttpAuthType auth_type) {
@@ -94,17 +96,19 @@ void HttpResponseBuilder::build() {
       header_.add("Content-Length", std::to_string(content_length));
     }
   };
-
+  if (resp_file_) {
+    FileLoader(file_name_).read_all(&tmp_buffer_);
+  }
   if (compressed_) {
     header_.add("Content-Encoding", "gzip");
     EncodeUtil::gzipcompress(
-        (void *)body_.data(), body_.size(), sender_, func_connection,
+        &tmp_buffer_, sender_, func_connection,
         std::bind(&HttpResponseBuilder::prepare_header, this));
 
   } else {
-    func_connection(body_.size());
+    func_connection(tmp_buffer_.readable());
     prepare_header();
-    sender_->append(body_.data(), body_.size());
+    sender_->append(tmp_buffer_.peek(), tmp_buffer_.readable());
   }
 }
 

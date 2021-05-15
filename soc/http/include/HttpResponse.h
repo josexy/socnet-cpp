@@ -42,22 +42,26 @@ public:
   }
 
   HttpResponseBuilder &append_body(const std::string_view &body) {
-    body_.append(body.data(), body.size());
+    tmp_buffer_.append(body.data(), body.size());
+    resp_file_ = false;
     return *this;
   }
 
   HttpResponseBuilder &body(const std::string_view &body) {
-    body_.assign(body.data(), body.size());
+    tmp_buffer_.retired_all();
+    append_body(body);
     return *this;
   }
 
   HttpResponseBuilder &render_file(const std::string_view &filename) {
-    FileLoader(filename).read_all(body_);
+    file_name_ = filename;
+    resp_file_ = true;
     return *this;
   }
 
   HttpResponseBuilder &render_html(const std::string_view &filename) {
-    FileLoader(filename).read_all(body_);
+    file_name_ = filename;
+    resp_file_ = true;
     header_.add("Content-Type", "text/html; charset=utf-8");
     return *this;
   }
@@ -80,7 +84,9 @@ public:
   HttpVersion version() const noexcept { return version_; }
   int status_code() const noexcept { return status_code_; }
   const HttpHeader &header() const noexcept { return header_; }
-  const std::string &body() const noexcept { return body_; }
+  std::string_view body() const noexcept {
+    return std::string_view(tmp_buffer_.peek(), tmp_buffer_.readable());
+  }
   bool close() const noexcept { return close_; }
 
   void build();
@@ -90,15 +96,17 @@ private:
 
 private:
   std::string uri_;
-  std::string body_;
+  std::string file_name_;
 
   HttpVersion version_;
   HttpHeader header_;
 
+  bool resp_file_;
   bool close_;
   bool compressed_;
   int status_code_;
 
+  net::Buffer tmp_buffer_;
   net::Buffer *sender_;
 };
 
