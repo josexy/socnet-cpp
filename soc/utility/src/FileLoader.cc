@@ -1,8 +1,5 @@
 #include "../include/FileLoader.h"
 
-#include <string.h>
-#include <sys/stat.h>
-
 using namespace soc;
 
 FileLoader::FileLoader() : fp_(nullptr) {}
@@ -42,13 +39,15 @@ bool FileLoader::read_line(std::string &line) {
 }
 
 // can read binary file or regular file
-void FileLoader::read_all(std::string &data) {
+void FileLoader::read_all(net::Buffer *buffer) {
   if (!fp_)
     return;
-  char buffer[4096] = {0};
-  int n;
-  while ((n = ::fread(buffer, sizeof(char), 4096, fp_)) > 0)
-    data.append(buffer, n);
+  ::fseek(fp_, 0, SEEK_END);
+  auto size = ::ftell(fp_);
+  ::rewind(fp_);
+  buffer->ensure_writable(size);
+  ::fread(buffer->begin_write(), sizeof(char), size, fp_);
+  buffer->has_written(size);
 }
 
 bool FileLoader::exist(const std::string_view &file) {
