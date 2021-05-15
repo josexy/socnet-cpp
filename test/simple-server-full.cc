@@ -26,7 +26,6 @@ int main() {
 
   assert(app.set_mounting_html_dir("/", "html"));
   assert(app.set_mounting_file_dir("/resources"));
-
   app.redirect("/json", "/get");
   app.set_url_auth("/json", HttpAuthType::Digest);
 
@@ -37,11 +36,11 @@ int main() {
 
   app.route("/post/", [&](const HttpRequest &req, HttpResponse &resp) {
     if (auto file1 = req.multipart().file("file1"); file1.has_value()) {
-      auto &x = file1.value().get();
+      auto &x = file1.value().get().at(0);
       cout << x.name << "\t" << x.file_name << "\t" << x.file_type << endl;
     }
     if (auto file2 = req.multipart().file("file2"); file2.has_value()) {
-      auto &x = file2.value().get();
+      auto &x = file2.value().get().at(0);
       cout << x.name << "\t" << x.file_name << "\t" << x.file_type << endl;
     }
     resp.body_html("html/post.html").send();
