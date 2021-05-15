@@ -3,7 +3,6 @@
 #define SOC_HTTP_HTTPSERVER_H
 
 #include "../../net/include/TcpServer.h"
-#include "HttpRequest.h"
 #include "HttpResponse.h"
 using namespace soc::net;
 

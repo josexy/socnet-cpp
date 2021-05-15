@@ -3,7 +3,6 @@
 #include "../../modules/cgi/include/CGI.h"
 #include "../../utility/include/FileLister.h"
 #include <regex>
-#include <sys/stat.h>
 
 using namespace soc::http;
 using std::placeholders::_1;
