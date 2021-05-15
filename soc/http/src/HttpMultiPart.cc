@@ -155,10 +155,11 @@ void HttpMultiPart::parse(const std::string_view &body) {
         form_.emplace(name, form_file_data);
       else { // file
         if (auto x = files_.find(name); x != files_.end()) {
-          x->second.emplace_back(name, filename, type, form_file_data);
+          x->second.emplace_back(std::move(name), std::move(filename),
+                                 std::move(type), std::move(form_file_data));
         } else {
-          files_.emplace(name, std::move(std::vector{Part{name, filename, type,
-                                                          form_file_data}}));
+          files_.emplace(name, std::move(std::vector{Part(name, filename, type,
+                                                          form_file_data)}));
         }
       }
       name = filename = type = form_file_data = "";

@@ -15,6 +15,11 @@ public:
     std::string file_name;
     std::string file_type;
     std::string data_str;
+
+    Part() {}
+    Part(std::string name, std::string fn, std::string ft, std::string data)
+        : name(std::move(name)), file_name(std::move(fn)),
+          file_type(std::move(ft)), data_str(std::move(data)) {}
   };
 
   void set_boundary(const std::string &boundary) noexcept { bd_ = boundary; }
