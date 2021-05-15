@@ -18,6 +18,7 @@ public:
 
   const char *begin() const noexcept { return &*buffer_.begin(); }
   char *begin() noexcept { return &*buffer_.begin(); }
+  char *begin_write() noexcept { return &*buffer_.begin() + windex_; }
   const char *peek() const noexcept { return begin() + rindex_; }
 
   void retired_all() { rindex_ = windex_ = 0; }
@@ -31,29 +32,28 @@ public:
   template <class T>
   void append(const typename std::vector<T>::iterator &begin,
               const typename std::vector<T>::iterator &end) {
-    size_t len = size_t(end - begin);
-    if (writable() < len) {
-      make_space(len);
-    }
+    int len = end - begin;
+    if (len <= 0)
+      return;
+    ensure_writable(len);
     std::copy(begin, end, buffer_.data() + windex_);
-    windex_ += len;
+    has_written(len);
   }
 
   void append(const char *data, size_t len) {
-    if (writable() < len) {
-      make_space(len);
-    }
+    if (len <= 0)
+      return;
+    ensure_writable(len);
     std::copy(data, data + len, buffer_.data() + windex_);
-    windex_ += len;
+    has_written(len);
   }
 
-  void append(const unsigned char *data, size_t len) {
-    if (writable() < len) {
+  void ensure_writable(size_t len) {
+    if (writable() < len)
       make_space(len);
-    }
-    std::copy(data, data + len, buffer_.data() + windex_);
-    windex_ += len;
   }
+
+  void has_written(size_t len) { windex_ += len; }
 
   int read_fd(int fd, int *err) {
     char buff[65535];
