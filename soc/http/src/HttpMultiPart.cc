@@ -132,25 +132,30 @@ void HttpMultiPart::parse(const std::string_view &body) {
       break;
     }
     case start_content_data: {
+      constexpr const static size_t buf_size = 4096;
+      form_file_data.reserve(buf_size);
+      char buffer[buf_size];
+      size_t k = 0, ix = 1, pi = i;
       while (i < len) {
-        if (i + 1 < len && body[i] == '-' && body[i + 1] == '-' &&
-            strncmp(body.data() + i + 2, boundary_s, bl) == 0) {
+        if (i + 4 < len && body[i] == CR && body[i + 1] == LF &&
+            body[i + 2] == '-' && body[i + 3] == '-' &&
+            strncmp(body.data() + i + 4, boundary_s, bl) == 0) {
+          form_file_data.resize(i - pi);
+          i += 2;
           state = end_content_data;
           break;
         } else {
-          if (i + 1 < len && body[i] == CR && body[i + 1] == LF) {
-            // skip \r, save \n as original new line
-            i++;
+          buffer[k++] = body[i++];
+          if (k >= buf_size) {
+            k = 0, ix++;
+            form_file_data.append(buffer, buf_size);
+            form_file_data.reserve(buf_size * ix);
           }
-          form_file_data += body[i++];
         }
       }
       break;
     }
     case end_content_data: {
-      // pop \n
-      if (form_file_data.size() && form_file_data.back() == LF)
-        form_file_data.pop_back();
       if (!file_mark) // form
         form_.emplace(name, form_file_data);
       else { // file
