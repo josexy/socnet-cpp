@@ -11,7 +11,23 @@
 namespace soc {
 namespace net {
 
-class ThreadPool {
+class SpinLock {
+public:
+  SpinLock() : lock_(ATOMIC_FLAG_INIT) {}
+  SpinLock(const SpinLock &) = delete;
+  SpinLock(SpinLock &&) = delete;
+
+  void lock() {
+    while (lock_.test_and_set(std::memory_order_relaxed))
+      std::this_thread::yield();
+  }
+  void unlock() { lock_.clear(std::memory_order_relaxed); }
+
+private:
+  std::atomic_flag lock_;
+};
+
+template <class LockerType = std::mutex> class ThreadPool {
 public:
   using Task = std::function<void()>;
 
@@ -20,27 +36,64 @@ public:
     return th;
   }
 
-  ~ThreadPool();
-  void add(const Task &task);
-  void shutdown();
+  ~ThreadPool() {
+    if (!running_)
+      return;
+    shutdown();
+  }
+  void add(const Task &task) {
+    if (!running_)
+      return;
+    {
+      std::lock_guard<LockerType> lock(locker_);
+      tasks_.emplace(task);
+    }
+    cond_.notify_one();
+  }
+  void shutdown() {
+    running_ = false;
+    cond_.notify_all();
+    for (auto &th : threads_) {
+      if (th.joinable())
+        th.join();
+    }
+  }
 
 private:
-  ThreadPool(size_t max_threads);
+  ThreadPool(size_t max_threads) : running_(true) {
+    for (size_t i = 0; i < max_threads; ++i) {
+      threads_.emplace_back(&ThreadPool::run, this);
+    }
+  }
   ThreadPool(const ThreadPool &) = delete;
   ThreadPool(const ThreadPool &&) = delete;
   ThreadPool &operator=(const ThreadPool &) = delete;
   ThreadPool &operator=(const ThreadPool &&) = delete;
 
-  void run();
+  void run() {
+    while (true) {
+      Task task;
+      {
+        std::unique_lock<LockerType> lock(locker_);
+        while (running_ && tasks_.empty()) {
+          cond_.wait(lock);
+        }
+        if (!running_ && tasks_.empty())
+          return;
+        task = tasks_.front();
+        tasks_.pop();
+      }
+      task();
+    }
+  }
 
 private:
   std::queue<Task> tasks_;
   std::atomic<bool> running_;
-  std::mutex mutex_;
-  std::condition_variable cond_;
+  LockerType locker_;
+  std::condition_variable_any cond_;
   std::vector<std::thread> threads_;
 };
-
 } // namespace net
 } // namespace soc
 

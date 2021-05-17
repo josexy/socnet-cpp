@@ -166,7 +166,7 @@ void TcpServer::handle_conn_read(TcpConnectionPtr conn) {
     return;
 
   tq_.adjust(conn->fd(), timestamp::now_msecond(idle_timeout_));
-  ThreadPool::instance().add(std::bind(&TcpServer::on_read, this, conn));
+  ThreadPool<>::instance().add(std::bind(&TcpServer::on_read, this, conn));
 }
 
 void TcpServer::handle_conn_write(TcpConnectionPtr conn) {
@@ -174,7 +174,7 @@ void TcpServer::handle_conn_write(TcpConnectionPtr conn) {
     return;
 
   tq_.adjust(conn->fd(), timestamp::now_msecond(idle_timeout_));
-  ThreadPool::instance().add(std::bind(&TcpServer::on_write, this, conn));
+  ThreadPool<>::instance().add(std::bind(&TcpServer::on_write, this, conn));
 }
 
 void TcpServer::on_write(TcpConnection *conn) {
