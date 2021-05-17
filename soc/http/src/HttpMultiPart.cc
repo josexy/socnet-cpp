@@ -140,8 +140,6 @@ void HttpMultiPart::parse(const std::string_view &body) {
         if (i + 4 < len && body[i] == CR && body[i + 1] == LF &&
             body[i + 2] == '-' && body[i + 3] == '-' &&
             strncmp(body.data() + i + 4, boundary_s, bl) == 0) {
-          if (k != 0)
-            form_file_data.append(buffer, buf_size);
           form_file_data.resize(i - pi);
           i += 2;
           state = end_content_data;
