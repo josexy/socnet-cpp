@@ -156,9 +156,9 @@ void TcpServer::handle_conn_close(TcpConnectionPtr conn) {
   ::SSL_shutdown(conn->ssl());
   ::SSL_free(conn->ssl());
 #endif
-  del_fd(conn->fd());
   if (close_cb_)
     close_cb_(conn);
+  del_fd(conn->fd());
 }
 
 void TcpServer::handle_conn_read(TcpConnectionPtr conn) {
