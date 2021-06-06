@@ -167,9 +167,11 @@ public:
     return *this;
   }
 
+  decltype(auto) msg_buf() { return &msg_buf_; }
   void send();
 
 private:
+  net::Buffer msg_buf_;
   net::TcpConnectionPtr conn_;
   HttpResponseBuilder *builder_;
 };
