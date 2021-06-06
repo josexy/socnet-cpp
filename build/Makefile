@@ -321,30 +321,6 @@ soc/modules/php-fastcgi/src/PhpFastCgi.cc.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/socnet.dir/build.make CMakeFiles/socnet.dir/soc/modules/php-fastcgi/src/PhpFastCgi.cc.s
 .PHONY : soc/modules/php-fastcgi/src/PhpFastCgi.cc.s
 
-soc/modules/php-fastcgi/src/TestMain.o: soc/modules/php-fastcgi/src/TestMain.cc.o
-.PHONY : soc/modules/php-fastcgi/src/TestMain.o
-
-# target to build an object file
-soc/modules/php-fastcgi/src/TestMain.cc.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/socnet.dir/build.make CMakeFiles/socnet.dir/soc/modules/php-fastcgi/src/TestMain.cc.o
-.PHONY : soc/modules/php-fastcgi/src/TestMain.cc.o
-
-soc/modules/php-fastcgi/src/TestMain.i: soc/modules/php-fastcgi/src/TestMain.cc.i
-.PHONY : soc/modules/php-fastcgi/src/TestMain.i
-
-# target to preprocess a source file
-soc/modules/php-fastcgi/src/TestMain.cc.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/socnet.dir/build.make CMakeFiles/socnet.dir/soc/modules/php-fastcgi/src/TestMain.cc.i
-.PHONY : soc/modules/php-fastcgi/src/TestMain.cc.i
-
-soc/modules/php-fastcgi/src/TestMain.s: soc/modules/php-fastcgi/src/TestMain.cc.s
-.PHONY : soc/modules/php-fastcgi/src/TestMain.s
-
-# target to generate assembly for a file
-soc/modules/php-fastcgi/src/TestMain.cc.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/socnet.dir/build.make CMakeFiles/socnet.dir/soc/modules/php-fastcgi/src/TestMain.cc.s
-.PHONY : soc/modules/php-fastcgi/src/TestMain.cc.s
-
 soc/net/src/InetAddress.o: soc/net/src/InetAddress.cc.o
 .PHONY : soc/net/src/InetAddress.o
 
@@ -618,9 +594,6 @@ help:
 	@echo "... soc/modules/php-fastcgi/src/PhpFastCgi.o"
 	@echo "... soc/modules/php-fastcgi/src/PhpFastCgi.i"
 	@echo "... soc/modules/php-fastcgi/src/PhpFastCgi.s"
-	@echo "... soc/modules/php-fastcgi/src/TestMain.o"
-	@echo "... soc/modules/php-fastcgi/src/TestMain.i"
-	@echo "... soc/modules/php-fastcgi/src/TestMain.s"
 	@echo "... soc/net/src/InetAddress.o"
 	@echo "... soc/net/src/InetAddress.i"
 	@echo "... soc/net/src/InetAddress.s"
