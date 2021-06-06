@@ -1,12 +1,9 @@
 
 #include "../include/HttpServer.h"
 #include "../../modules/cgi/include/CGI.h"
-#include "../../modules/mysql/include/MYSQL.h"
-#include "../../modules/php-fastcgi/include/PhpFastCgi.h"
 #include "../../utility/include/FileLister.h"
-#include "../../utility/include/Logger.h"
-#include <filesystem>
 #include <regex>
+
 using namespace soc::http;
 using std::placeholders::_1;
 
@@ -19,46 +16,36 @@ HttpServer::~HttpServer() {}
 
 void HttpServer::initialize() {
   ::srand(::time(nullptr));
-  set_idle_timeout(GET_CONFIG(int, "server", "idle_timeout"));
-  enable_cgi(GET_CONFIG(bool, "server", "enable_simple_cgi"));
+  set_idle_timeout(0);
 
-  default_page_ =
-      GET_CONFIG(std::vector<std::string>, "server", "default_page");
-
-  if (GET_CONFIG(bool, "server", "enable_https")) {
-    set_https_certificate(GET_CONFIG(std::string, "https", "cert_file"),
-                          GET_CONFIG(std::string, "https", "private_key_file"),
-                          GET_CONFIG(std::string, "https", "password"));
-  }
   server_->set_msg_cb(std::bind(&HttpServer::handle_msg, this, _1));
 
   code_handlers_.emplace(404, [](const auto & /*req*/, auto &resp) {
     resp.status_code(404).body("404 not found!").send();
   });
-  code_handlers_.emplace(500, [](const auto & /*req*/, auto &resp) {
-    std::string content;
-    content = "<h1>Internal Server Error  </h1>";
-    content += "<p style=\"color:red\">" +
-               std::string(resp.msg_buf()->peek(), resp.msg_buf()->readable()) +
-               "</p>";
-    resp.status_code(500).body(content).send();
-  });
 }
 
-void HttpServer::start() {
-  InetAddress address(GET_CONFIG(std::string, "server", "listen_ip"),
-                      GET_CONFIG(int, "server", "listen_port"));
+void HttpServer::start(const InetAddress &address) {
+  initialize_env();
+  Env::instance().set("SERVER_ADDR", address.to_string());
   server_->start(address);
 }
 
-void HttpServer::start(const InetAddress &address) { server_->start(address); }
+#ifdef SUPPORT_SSL_LIB
 
-void HttpServer::set_https_certificate(const std::string &cert_file,
-                                       const std::string &private_key_file,
-                                       const std::string &password) {
-  server_->set_https_certificate(cert_file.c_str(), private_key_file.c_str(),
-                                 password.size() > 0 ? password.c_str()
-                                                     : nullptr);
+void HttpServer::set_https_certificate(const char *cert_file,
+                                       const char *private_key_file,
+                                       const char *password) {
+  server_->set_https_certificate(cert_file, private_key_file, password);
+}
+#endif
+
+void HttpServer::initialize_env() {
+#ifdef SUPPORT_SSL_LIB
+  Env::instance().set("SCHEMA", "https");
+#else
+  Env::instance().set("SCHEMA", "http");
+#endif
 }
 
 void HttpServer::quit() { server_->quit(); }
@@ -110,6 +97,25 @@ bool HttpServer::set_mounting_html_dir(const string &url, const string &dir) {
   return true;
 }
 
+bool HttpServer::set_mounting_file_dir(const string &url) {
+  if (url.empty())
+    return false;
+
+  if (url.front() == '/' && url.size() > 1)
+    if (!FileLoader::exist_dir(std::string(url.c_str() + 1)))
+      return false;
+
+  if (url.back() != '/')
+    fdir_tb_.emplace_back(url + "/");
+  else
+    fdir_tb_.emplace_back(url);
+
+  std::sort(
+      fdir_tb_.begin(), fdir_tb_.end(),
+      [this](const auto &l, const auto &r) { return l.size() > r.size(); });
+  return true;
+}
+
 void HttpServer::set_idle_timeout(int millsecond) {
   if (millsecond <= 0)
     millsecond = 2000;
@@ -126,10 +132,10 @@ void HttpServer::set_url_auth(const std::string &origin_url,
 }
 
 void HttpServer::enable_cgi(bool on) {
-  if (on) {
-    cgi_bin_ = GET_CONFIG(std::string, "cgi", "cgi_bin");
-    enable_cgi_ = on;
-  }
+  auto op = Env::instance().get("CGI-BIN");
+  assert(op.has_value());
+  cgi_bin_ = op.value();
+  enable_cgi_ = on;
 }
 
 bool HttpServer::handle_msg(TcpConnectionPtr conn) {
@@ -168,6 +174,7 @@ bool HttpServer::handle_msg(TcpConnectionPtr conn) {
     conn->context(nullptr);
     return true;
   }
+  bool is_reg_file = false;
   int state = start_url_route;
   do {
     if (state == start_url_route) {
@@ -186,10 +193,16 @@ bool HttpServer::handle_msg(TcpConnectionPtr conn) {
       if (enable_cgi_ && handle_cgi_bin(req, resp))
         break;
       else
+        state = start_url_file_directory;
+    }
+    if (state == start_url_file_directory) {
+      if (handle_file_dir_index_of(is_reg_file, req, resp))
+        break;
+      else
         state = start_url_locate_resource;
     }
     if (state == start_url_locate_resource) {
-      if (handle_static_dynamic_resource(req, resp))
+      if (handle_static_resource(is_reg_file, req, resp))
         break;
       else
         state = start_url_route_regex;
@@ -273,6 +286,85 @@ bool HttpServer::handle_cgi_bin(HttpRequest *req, HttpResponse &resp) {
   return true;
 }
 
+bool HttpServer::handle_file_dir_index_of(bool &is_reg_file, HttpRequest *req,
+                                          HttpResponse &resp) {
+  if (fdir_tb_.empty())
+    return false;
+  std::string_view vurl = req->url();
+
+  if (vurl.find_first_not_of("/") == vurl.npos)
+    return false;
+
+  struct stat st;
+  int ret = stat(vurl.data() + 1, &st);
+  if (ret == -1) {
+    if (vurl != "/" || fdir_tb_.back() != vurl)
+      return false;
+  } else if (S_ISREG(st.st_mode)) {
+    is_reg_file = true;
+    return false;
+  }
+
+  if (vurl.back() != '/') {
+    resp.status_code(301)
+        .header("Location", std::string(vurl.data(), vurl.size()) + "/")
+        .send();
+    return true;
+  }
+
+  bool found = false;
+  for (auto &dir_url : fdir_tb_) {
+    if (vurl.starts_with(dir_url)) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    if (auto x = code_handlers_.find(403); x != code_handlers_.end())
+      x->second(*req, resp);
+    else
+      resp.status_code(403).body("Forbidden to access site!").send();
+    return false;
+  }
+
+  std::string title = "Index of " + req->url();
+  std::string file_img = "/resources/text.gif",
+              dir_img = "/resources/folder.gif";
+  std::string document = R"(
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8">)";
+
+  document += "<title>" + title + "</title>" + "</head>" + "<body>" + "<h1>" +
+              title + "</h1>";
+  document += R"(
+<table><tr>
+<th><img src=""></th>
+<th>Name</th>
+<th>Last modified</th>
+<th>Size</th>
+</tr>
+<tr><th colspan=5><hr/></th></tr>)";
+
+  std::vector<FileLister::FileInfo> files;
+  if (vurl.size() == 1)
+    vurl = ".";
+  else
+    vurl.remove_prefix(1);
+  FileLister::list(vurl, files);
+  for (auto &file : files) {
+    std::string img = file.is_dir ? dir_img : file_img;
+    document += "<tr><td><img src=\"" + img + "\" ></td><td><a href=\"" +
+                file.name + "\">" + file.name + "</a></td><td>" +
+                timestamp::fmt_time_t(file.lastmodtime) + "</td><td>" +
+                std::to_string(file.size) + "</td></tr>\n";
+  }
+
+  document += R"(<tr><th colspan="5"><hr/></th></tr></table></body></html>)";
+  resp.header("Content-Type", "text/html; charset=utf-8").body(document).send();
+  return true;
+}
+
 bool HttpServer::handle_url_auth(HttpRequest *req, HttpResponse &resp) {
   if (auth_tb_.empty())
     return true;
@@ -282,25 +374,14 @@ bool HttpServer::handle_url_auth(HttpRequest *req, HttpResponse &resp) {
     return true;
 
   if (item->second == HttpAuthType::Basic) {
-    bool verify = false;
-    if (GET_CONFIG(bool, "server", "enable_mysql")) {
-      auto auth = req->auth<HttpBasicLocalAuth>();
-      if (auth && auth->verify_user())
-        return true;
-    } else {
-      auto auth = req->auth<HttpBasicSqlAuth>();
-      if (auth && auth->verify_user())
-        return true;
+    HttpAuth<HttpBasicAuthType> *auth = req->auth<HttpBasicAuthType>();
+    if (auth && auth->verify_user()) {
+      return true;
     }
   } else if (item->second == HttpAuthType::Digest) {
-    if (GET_CONFIG(bool, "server", "enable_mysql")) {
-      auto auth = req->auth<HttpDigestSqlAuth>();
-      if (auth && auth->verify_user())
-        return true;
-    } else {
-      auto auth = req->auth<HttpDigestLocalAuth>();
-      if (auth && auth->verify_user())
-        return true;
+    HttpAuth<HttpDigestAuthType> *auth = req->auth<HttpDigestAuthType>();
+    if (auth && auth->verify_user()) {
+      return true;
     }
   }
 
@@ -338,43 +419,40 @@ bool HttpServer::handle_regex_match_url(HttpRequest *req, HttpResponse &resp) {
   return match_success;
 }
 
-bool HttpServer::handle_static_dynamic_resource(HttpRequest *req,
-                                                HttpResponse &resp) {
+bool HttpServer::handle_static_resource(bool is_reg_file, HttpRequest *req,
+                                        HttpResponse &resp) {
   bool locate_status = false, match_status = false;
   std::string_view prefix, suffix, mount_dir, vurl = req->url();
   std::string local_file_url;
-  if (!mount_dir_tb_.empty()) {
-    for (auto &dir_url : mount_dir_tb_) {
-      if (vurl.starts_with(dir_url.first)) {
-        mount_dir = dir_url.second;
-        vurl.remove_prefix(dir_url.first.size());
-        suffix = vurl;
-        match_status = true;
-        break;
-      }
-    }
-    if (!match_status)
-      return false;
-  }
-  local_file_url = std::string(mount_dir.data(), mount_dir.size());
-  bool enable_php = GET_CONFIG(bool, "server", "enable_php");
 
-  // default index page
-  if (suffix.empty()) {
-    get_index_page(enable_php, local_file_url);
-  } else {
-    local_file_url += std::string(suffix.data(), suffix.size());
-    // default index page
-    if (suffix.back() == '/') {
-      get_index_page(enable_php, local_file_url);
+  if (!is_reg_file) {
+    if (!mount_dir_tb_.empty()) {
+      for (auto &dir_url : mount_dir_tb_) {
+        if (vurl.starts_with(dir_url.first)) {
+          mount_dir = dir_url.second;
+          vurl.remove_prefix(dir_url.first.size());
+          suffix = vurl;
+          match_status = true;
+          break;
+        }
+      }
+      if (!match_status)
+        return false;
     }
+    if (suffix.empty())
+      suffix = "index.html";
+
+    local_file_url = std::string(mount_dir.data(), mount_dir.size()) +
+                     std::string(suffix.data(), suffix.size());
+  } else {
+    vurl.remove_prefix(1);
+    local_file_url = std::string(vurl.data(), vurl.size());
+    size_t pos;
+    if ((pos = vurl.find_last_of("/")) == vurl.npos)
+      return locate_status;
+    suffix = vurl.substr(pos + 1);
   }
   if (FileLoader::exist(local_file_url)) {
-    if (local_file_url.ends_with(".php")) {
-      if (GET_CONFIG(bool, "server", "enable_php")) {
-        return handle_dynamic_resource(local_file_url, req, resp);
-      }
-    }
     std::string type;
     mapping_mimetype(suffix, type);
     if (type.starts_with("text") || type.ends_with("xml") ||
@@ -388,108 +466,6 @@ bool HttpServer::handle_static_dynamic_resource(HttpRequest *req,
   return locate_status;
 }
 
-bool HttpServer::handle_dynamic_resource(const std::string &relpath,
-                                         HttpRequest *req, HttpResponse &resp) {
-  PhpFastCgi fcgi;
-
-  if (EXIST_CONFIG("php-fpm", "server_ip")) {
-    if (!fcgi.connectPhpFpm(GET_CONFIG(std::string, "php-fpm", "server_ip"),
-                            GET_CONFIG(int, "php-fpm", "server_port"))) {
-      // error
-      return false;
-    }
-  } else if (EXIST_CONFIG("php-fpm", "sock_path")) {
-    if (!fcgi.connectPhpFpm(GET_CONFIG(std::string, "php-fpm", "sock_path"))) {
-      // error
-      return false;
-    }
-  } else {
-    // error
-  }
-
-  fcgi.sendStartRequestRecord();
-  fcgi.sendParams(FCGI_Params::SCRIPT_FILENAME,
-                  std::filesystem::canonical(relpath));
-  if (auto x = req->header().get("Authorization"); x.has_value()) {
-    // Basic Authorization
-    if (req->auth_type() == HttpAuthType::Basic) {
-      std::string username, password;
-      if (GET_CONFIG(bool, "server", "enable_mysql")) {
-        auto auth = req->auth<HttpBasicSqlAuth>();
-        // username & password
-        username = auth->username();
-        password = auth->password();
-      } else {
-        auto auth = req->auth<HttpBasicLocalAuth>();
-        username = auth->username();
-        password = auth->password();
-      }
-      fcgi.sendParams(FCGI_Params::PHP_AUTH_USER, username);
-      fcgi.sendParams(FCGI_Params::PHP_AUTH_PW, password);
-      // Digest Authorization
-    } else if (req->auth_type() == HttpAuthType::Digest) {
-      std::string digest_info;
-      if (GET_CONFIG(bool, "server", "enable_mysql")) {
-        auto auth = req->auth<HttpDigestSqlAuth>();
-        digest_info = auth->digest_info();
-      } else {
-        auto auth = req->auth<HttpDigestLocalAuth>();
-        digest_info = auth->digest_info();
-      }
-      fcgi.sendParams(FCGI_Params::PHP_AUTH_DIGEST, digest_info);
-    }
-  }
-
-  if (req->has_query()) {
-    fcgi.sendParams(FCGI_Params::QUERY_STRING, req->query_s());
-  }
-  if (req->method() == HttpMethod::HEAD) {
-    fcgi.sendParams(FCGI_Params::REQUEST_METHOD, "HEAD");
-    fcgi.sendEndRequestRecord();
-  } else if (req->method() == HttpMethod::GET) {
-    fcgi.sendParams(FCGI_Params::REQUEST_METHOD, "GET");
-    fcgi.sendEndRequestRecord();
-  } else if (req->method() == HttpMethod::POST) {
-    fcgi.sendParams(FCGI_Params::REQUEST_METHOD, "POST");
-    if (auto type = req->header().get("Content-Type"); type.has_value()) {
-      fcgi.sendParams(FCGI_Params::CONTENT_TYPE, type.value());
-      fcgi.sendParams(FCGI_Params::CONTENT_LENGTH,
-                      std::to_string(req->post_data().size()));
-    }
-    fcgi.sendEndRequestRecord();
-    fcgi.sendPost(req->post_data());
-  }
-
-  Buffer buffer;
-  auto ret = fcgi.readPhpFpm(&buffer);
-  std::string_view sv(buffer.peek(), buffer.readable());
-  HttpHeader header;
-  int index = header.parse(sv);
-
-  if (auto x = header.get("Status"); x.has_value()) {
-    std::string_view status = x.value();
-    std::string_view codesv = status.substr(0, status.find_first_of(" "));
-    header.remove("Status");
-
-    int code = std::atoi(std::string(codesv.data(), codesv.size()).data());
-    resp.status_code(code);
-    if (code == 500) {
-      // Server Internal Error
-      if (auto x = code_handlers_.find(code); x != code_handlers_.end()) {
-        resp.header(header);
-        resp.msg_buf()->append(ret.second.data(), ret.second.size());
-        x->second(*req, resp);
-        return true;
-      }
-    }
-  }
-  resp.header(header);
-  sv.remove_prefix(index);
-  resp.append_body(sv);
-  resp.send();
-  return true;
-}
-
 void HttpServer::mapping_mimetype(const std::string_view &url,
                                   std::string &type) {
   size_t pos = url.find_first_of(".");
@@ -501,14 +477,4 @@ void HttpServer::mapping_mimetype(const std::string_view &url,
     type = t->second;
   } else
     type = "*/*"; // or text/plain
-}
-
-void HttpServer::get_index_page(bool php, std::string &rd) {
-  for (auto &index_page : default_page_) {
-    if (!php && index_page.ends_with("php"))
-      continue;
-    if (std::filesystem::exists(rd + index_page)) {
-      rd += index_page;
-    }
-  }
 }

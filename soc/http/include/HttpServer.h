@@ -3,7 +3,9 @@
 #define SOC_HTTP_HTTPSERVER_H
 
 #include "../../net/include/TcpServer.h"
+#include "../../utility/include/AppConfig.h"
 #include "HttpResponse.h"
+using namespace soc;
 using namespace soc::net;
 
 namespace soc {
@@ -21,6 +23,7 @@ public:
   HttpServer();
   ~HttpServer();
 
+  void start();
   void start(const InetAddress &address);
   void quit();
 
@@ -29,7 +32,6 @@ public:
   void error_code(int code, const Handler &cb);
   void redirect(const std::string &src, const std::string &dest);
   bool set_mounting_html_dir(const std::string &url, const std::string &dir);
-  bool set_mounting_file_dir(const std::string &url);
   void set_idle_timeout(int millsecond);
   void set_ext_mimetype_mapping(const std::string &ext,
                                 const std::string &mimetype);
@@ -39,13 +41,11 @@ public:
 
   void enable_cgi(bool on);
 
-#ifdef SUPPORT_SSL_LIB
-  void set_https_certificate(const char *cert_file,
-                             const char *private_key_file,
-                             const char *password = nullptr);
-#endif
+  void set_https_certificate(const std::string &cert_file,
+                             const std::string &private_key_file,
+                             const std::string &password = "");
+
 private:
-  void initialize_env();
   void initialize();
   bool handle_msg(TcpConnectionPtr);
 
@@ -53,12 +53,13 @@ private:
   bool handle_redirect(HttpRequest *, HttpResponse &);
   bool handle_bad_request(HttpRequest *, HttpResponse &);
   bool handle_cgi_bin(HttpRequest *, HttpResponse &);
-  bool handle_file_dir_index_of(bool &, HttpRequest *, HttpResponse &);
   bool handle_url_auth(HttpRequest *, HttpResponse &);
   bool handle_regex_match_url(HttpRequest *, HttpResponse &);
-  bool handle_static_resource(bool, HttpRequest *, HttpResponse &);
-
+  bool handle_static_dynamic_resource(HttpRequest *, HttpResponse &);
+  bool handle_dynamic_resource(const std::string &, HttpRequest *,
+                               HttpResponse &);
   void mapping_mimetype(const std::string_view &, std::string &);
+  void get_index_page(bool, std::string &);
 
 private:
   enum {
@@ -68,6 +69,7 @@ private:
     start_url_cgi,
     start_url_file_directory,
     start_url_locate_resource,
+    start_url_dynamic_resource,
     start_url_error
   };
 
@@ -85,7 +87,7 @@ private:
 
   std::vector<std::pair<std::string, std::string>> mount_dir_tb_;
   std::vector<std::string> url_rules_;
-  std::vector<std::string> fdir_tb_;
+  std::vector<std::string> default_page_;
 };
 } // namespace http
 } // namespace soc
