@@ -1,6 +1,6 @@
 <?php
 echo " hello";
-$conn = mysqli_connect("127.0.0.1", "root", "fuckingyou", "db_test", "3306");
+$conn = mysqli_connect("127.0.0.1", "root", "root", "db_test", "3306");
 $conn->query("use db_test");
 $res  = $conn->query("select *from tb_test");
 
