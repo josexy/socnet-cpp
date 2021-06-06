@@ -67,7 +67,6 @@ private:
     start_url_redirect,
     start_url_route_regex,
     start_url_cgi,
-    start_url_file_directory,
     start_url_locate_resource,
     start_url_dynamic_resource,
     start_url_error

@@ -6,20 +6,14 @@
 #include "HttpMultiPart.h"
 #include "HttpUtil.h"
 #include <variant>
-namespace soc {
-namespace http {
-#ifdef SUPPORT_LOCALPASSSTORE
-using HttpBasicAuthType = HttpBasicAuth<HttpLocalPassStore>;
-using HttpDigestAuthType = HttpDigestAuth<HttpLocalPassStore>;
-#elif defined(SUPPORT_MYSQL_LIB)
-using HttpBasicAuthType = HttpBasicAuth<HttpSqlPassStore>;
-using HttpDigestAuthType = HttpDigestAuth<HttpSqlPassStore>;
-#endif
-} // namespace http
-} // namespace soc
 
 namespace soc {
 namespace http {
+
+using HttpBasicLocalAuth = HttpBasicAuth<HttpLocalPassStore>;
+using HttpBasicSqlAuth = HttpBasicAuth<HttpSqlPassStore>;
+using HttpDigestLocalAuth = HttpDigestAuth<HttpLocalPassStore>;
+using HttpDigestSqlAuth = HttpDigestAuth<HttpSqlPassStore>;
 
 class HttpRequest {
 public:
@@ -44,6 +38,7 @@ public:
   std::optional<std::string> get(const std::string &key) const;
   HttpMethod method() const noexcept { return method_; }
   HttpVersion version() const noexcept { return version_; }
+  HttpAuthType auth_type() const noexcept { return auth_type_; }
   const HttpHeader &header() const noexcept { return header_; }
   const std::string &query_s() const noexcept { return query_s_; }
   const HttpMultiPart &multipart() const noexcept { return multipart_; }
@@ -60,6 +55,7 @@ public:
   decltype(auto) query() const noexcept { return query_; }
   decltype(auto) form() const noexcept { return form_; }
   decltype(auto) cookies() const noexcept { return cookies_; }
+  decltype(auto) post_data() const noexcept { return post_data_; }
 
   template <class T> decltype(auto) auth() const {
     return const_cast<T *>(std::get_if<T>(&auth_));
@@ -88,12 +84,12 @@ private:
   std::string req_url_;
   std::string url_;
   std::string query_s_;
-
+  std::string post_data_;
   HttpMethod method_;
   HttpVersion version_;
   HttpHeader header_;
   HttpMultiPart multipart_;
-
+  HttpAuthType auth_type_;
   RetCode ret_code_;
 
   bool close_;
@@ -101,7 +97,9 @@ private:
   bool has_multipart_;
   bool has_cookies_;
 
-  std::variant<HttpBasicAuthType, HttpDigestAuthType> auth_;
+  std::variant<HttpBasicLocalAuth, HttpBasicSqlAuth, HttpDigestLocalAuth,
+               HttpDigestSqlAuth>
+      auth_;
   std::unordered_map<std::string, std::string> query_;
   std::unordered_map<std::string, std::string> form_;
   std::unordered_map<std::string, std::string> cookies_;
