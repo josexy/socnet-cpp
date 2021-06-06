@@ -87,6 +87,9 @@ public:
     }
     return nullptr;
   }
+
+  size_t size() const noexcept { return __kvObjects.size(); }
+
   JsonObject *toJsonObject() { return this; }
 
 private:

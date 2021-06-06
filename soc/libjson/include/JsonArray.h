@@ -90,6 +90,8 @@ public:
     add_values(std::forward<const Args>(args)...);
   }
 
+  size_t size() const noexcept { return __lstValue.size(); }
+
 private:
   std::vector<std::shared_ptr<JsonValue>> __lstValue;
 };
