@@ -1,23 +1,18 @@
 #ifndef SOC_MODULE_MYSQL_H
 #define SOC_MODULE_MYSQL_H
 
-#include "../../../net/include/Env.h"
-#include "../../../utility/include/MacroCtl.h"
+#include "../../../utility/include/AppConfig.h"
 #include <assert.h>
-#include <vector>
-
-#ifdef SUPPORT_MYSQL_LIB
 #include <mysql/mysql.h>
 
 namespace soc {
 class MYSQLManager {
 public:
   static MYSQLManager &instance() noexcept {
-    static MYSQLManager manager(
-        Env::instance().get("MYSQL_HOST").value(),
-        Env::instance().get("MYSQL_USER").value(),
-        Env::instance().get("MYSQL_PASSWORD").value(),
-        atoi(Env::instance().get("MYSQL_PORT").value().c_str()));
+    static MYSQLManager manager(GET_CONFIG(std::string, "mysql", "host"),
+                                GET_CONFIG(std::string, "mysql", "username"),
+                                GET_CONFIG(std::string, "mysql", "password"),
+                                GET_CONFIG(int, "mysql", "port"));
     return manager;
   }
 
@@ -77,6 +72,5 @@ private:
 };
 
 } // namespace soc
-#endif
 
 #endif
