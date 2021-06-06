@@ -10,7 +10,7 @@ A high performance HTTP server based on linux epoll designed by C++ 20
 - 利用状态机解析TCP数据流并转化为HTTP Request对象
 - 通过OpenSSL实现HTTPS安全连接
 - 支持Gzip压缩算法
-- 通过Fastcgi解析PHP文件，实现动态web服务器
+- 通过php-fpm解析PHP文件，实现动态web服务器
 - 采用json配置文件
 - ...
 
@@ -196,6 +196,8 @@ echo -n "user1:socnet@test:12345"|md5sum
     }
 }
 ```
+
+PS: 可能需要配置php支持mysql，除此之外，也可能需要修改php-fpm配置文件中 `user` 和 `group` 为当前用户名。
 
 ## 压力测试
 测试环境
