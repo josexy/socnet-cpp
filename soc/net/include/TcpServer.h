@@ -1,24 +1,13 @@
 #ifndef SOC_NET_TCPSERVER_H
 #define SOC_NET_TCPSERVER_H
 
-#include <sys/epoll.h>
-#include <sys/eventfd.h>
-
-#include <atomic>
-
+#include "../../utility/include/AppConfig.h"
 #include "TcpConnection.h"
 #include "TimerQueue.h"
-
-#include "Env.h"
-
-#ifdef SUPPORT_SSL_LIB
-#include <assert.h>
-
+#include <atomic>
 #include <memory>
-
-#include "SSL.h"
-#endif
-
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
 namespace soc {
 namespace net {
 
@@ -48,11 +37,9 @@ public:
   void set_msg_cb(const MsgCb &cb) { msg_cb_ = std::move(cb); }
   void set_close_conn_cb(const CloseCb &cb) { close_cb_ = std::move(cb); }
 
-#ifdef SUPPORT_SSL_LIB
   void set_https_certificate(const char *cert_file,
                              const char *private_key_file,
                              const char *password = nullptr);
-#endif
 
 private:
   void loop();
@@ -64,9 +51,7 @@ private:
   void handle_wakeup();
   void handle_timeout();
 
-#ifdef SUPPORT_SSL_LIB
   void handle_connected_conn(int connfd, SSL *ssl);
-#endif
   void handle_connected_conn(int connfd);
 
   void on_write(TcpConnectionPtr conn);
@@ -83,10 +68,7 @@ private:
   ServerSocket socket_;
   std::atomic<bool> quit_;
 
-#ifdef SUPPORT_SSL_LIB
   std::unique_ptr<SSLTls> ssl_;
-#endif
-
   std::vector<epoll_event> events_;
   std::unordered_map<int, TcpConnection> conns_;
   TimerQueue tq_;

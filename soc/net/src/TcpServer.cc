@@ -33,7 +33,6 @@ TcpServer::~TcpServer() {
   }
 }
 
-#ifdef SUPPORT_SSL_LIB
 void TcpServer::set_https_certificate(const char *cert_file,
                                       const char *private_key_file,
                                       const char *password) {
@@ -41,12 +40,8 @@ void TcpServer::set_https_certificate(const char *cert_file,
     return;
   ssl_ = std::make_unique<SSLTls>(cert_file, private_key_file, password);
 }
-#endif
 
 void TcpServer::start(const InetAddress &address) {
-#ifdef SUPPORT_SSL_LIB
-  assert(ssl_ != nullptr);
-#endif
 
   socket_.bind(address);
   socket_.listen();
@@ -110,29 +105,27 @@ void TcpServer::handle_server_listen() {
     if (connfd <= 0)
       break;
 
-#ifdef SUPPORT_SSL_LIB
-    SSL *ssl = ssl_->ssl_create_conn(connfd);
-    int ret = ssl_->accept_conn(ssl);
-    if (ret < 1) {
-      ::ERR_print_errors_fp(stderr);
-      ::SSL_shutdown(ssl);
-      ::SSL_free(ssl);
-      ::close(connfd);
-      break;
+    if (GET_CONFIG(bool, "server", "enable_https")) {
+      SSL *ssl = ssl_->ssl_create_conn(connfd);
+      int ret = ssl_->accept_conn(ssl);
+      if (ret < 1) {
+        ::ERR_print_errors_fp(stderr);
+        ::SSL_shutdown(ssl);
+        ::SSL_free(ssl);
+        ::close(connfd);
+        break;
+      }
+      handle_connected_conn(connfd, ssl);
+    } else {
+      handle_connected_conn(connfd);
     }
-    handle_connected_conn(connfd, ssl);
-#else
-    handle_connected_conn(connfd);
-#endif
   } while (0);
 }
 
-#ifdef SUPPORT_SSL_LIB
 void TcpServer::handle_connected_conn(int connfd, SSL *ssl) {
   handle_connected_conn(connfd);
   conns_[connfd].set_ssl(ssl);
 }
-#endif
 
 void TcpServer::handle_connected_conn(int connfd) {
   ServerSocket::set_nonblocking(connfd);
@@ -152,10 +145,10 @@ void TcpServer::handle_conn_close(TcpConnectionPtr conn) {
 
   conn->disconnected(true);
 
-#ifdef SUPPORT_SSL_LIB
-  ::SSL_shutdown(conn->ssl());
-  ::SSL_free(conn->ssl());
-#endif
+  if (conn->ssl()) {
+    ::SSL_shutdown(conn->ssl());
+    ::SSL_free(conn->ssl());
+  }
   if (close_cb_)
     close_cb_(conn);
   del_fd(conn->fd());
@@ -178,7 +171,7 @@ void TcpServer::handle_conn_write(TcpConnectionPtr conn) {
 }
 
 void TcpServer::on_write(TcpConnection *conn) {
-  int err;
+  int err, err_t;
   int n = conn->write(&err);
 
   if (n == 0) {
@@ -193,11 +186,10 @@ void TcpServer::on_write(TcpConnection *conn) {
       return;
     }
   } else if (n < 0) {
-#ifdef SUPPORT_SSL_LIB
-    if (err == SSL_ERROR_WANT_WRITE) {
-#else
-    if (err == EAGAIN) {
-#endif
+    err_t = EAGAIN;
+    if (conn->ssl())
+      err_t = SSL_ERROR_WANT_WRITE;
+    if (err == err_t) {
       // Continue sending messages
       mod_fd(conn->fd(), EPOLLOUT | kConnEvent);
       return;
@@ -207,14 +199,14 @@ void TcpServer::on_write(TcpConnection *conn) {
 }
 
 void TcpServer::on_read(TcpConnection *conn) {
-  int err;
+  int err, err_t;
   int n = conn->read(&err);
 
-#ifdef SUPPORT_SSL_LIB
-  if (n <= 0 && err != SSL_ERROR_WANT_READ) {
-#else
-  if (n <= 0 && err != EAGAIN) {
-#endif
+  err_t = EAGAIN;
+  if (conn->ssl())
+    err_t = SSL_ERROR_WANT_READ;
+
+  if (n <= 0 && err != err_t) {
     handle_conn_close(conn);
     return;
   }
