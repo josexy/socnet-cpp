@@ -10,6 +10,8 @@ A high performance HTTP server based on linux epoll designed by C++ 20
 - 利用状态机解析TCP数据流并转化为HTTP Request对象
 - 通过OpenSSL实现HTTPS安全连接
 - 支持Gzip压缩算法
+- 通过Fastcgi解析PHP文件，实现动态web服务器
+- 采用json配置文件
 - ...
 
 ## C++17/20特性
@@ -17,6 +19,12 @@ A high performance HTTP server based on linux epoll designed by C++ 20
 - 采用 `std::optional` 处理返回值
 - if/switch初始化
 - ...
+
+## 依赖库
+- pthread
+- zlib
+- openssl
+- mariadb
 
 ## Quick start
 ```bash
@@ -57,8 +65,6 @@ int main() {
 openssl genrsa -out private.pem 2048
 openssl req -new -x509 -key private.pem -out cert.crt -days 99999
 ```
-
-开启宏 `SUPPORT_SSL_LIB`
 
 ```cpp
 #include "soc/http/include/HttpServer.h"
@@ -148,6 +154,47 @@ app.set_url_auth("/json", HttpAuthType::Digest);
 echo -n "admin:socnet@test:admin"|md5sum
 echo -n "guest:socnet@test:guest"|md5sum
 echo -n "user1:socnet@test:12345"|md5sum
+```
+
+## JSON配置文件
+```json
+{
+    "server": {
+        "listen_ip": "0.0.0.0",
+        "listen_port": 5555,
+        "idle_timeout": 2000,
+        "server_hostname": "test",
+        "enable_https": false,
+        "enable_mysql": false,
+        "enable_php": true,
+        "enable_simple_cgi": false,
+        "default_page": [
+            "index.php",
+            "index.html"
+        ]
+    },
+    "https": {
+        "cert_file": "./ssl/cert.crt",
+        "private_key_file": "./ssl/private.pem",
+        "password": ""
+    },
+    "mysql": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "username": "root",
+        "password": "root",
+        "database": "db",
+        "table": "tb"
+    },
+    "cgi": {
+        "cgi_bin": "cgi-bin"
+    },
+    "php-fpm": {
+        "server_ip": "127.0.0.1",
+        "server_port": 9000,
+        "sock_path": "/run/php-fpm/php-fpm.sock"
+    }
+}
 ```
 
 ## 压力测试
