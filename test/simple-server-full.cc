@@ -2,7 +2,6 @@
 #include <signal.h>
 
 using namespace soc::http;
-
 HttpServer app;
 
 void signal_handler(int) { app.quit(); }
@@ -10,22 +9,8 @@ void signal_handler(int) { app.quit(); }
 int main() {
   signal(SIGINT, signal_handler);
 
-  // Env::instance().set("MYSQL_HOST", "");
-  // Env::instance().set("MYSQL_USER", "");
-  // Env::instance().set("MYSQL_PASSWORD", "");
-  // Env::instance().set("MYSQL_PORT", "");
-  // Env::instance().set("MYSQL_DB", "");
-  // Env::instance().set("MYSQL_TB", "");
+  app.set_mounting_html_dir("/", ".");
 
-  // Env::instance().set("CGI-BIN", "cgi-bin");
-  // app.enable_cgi(true);
-
-#ifdef SUPPORT_SSL_LIB
-  app.set_https_certificate("ssl/cert.crt", "ssl/private.pem");
-#endif
-
-  assert(app.set_mounting_html_dir("/", "html"));
-  assert(app.set_mounting_file_dir("/resources"));
   app.redirect("/json", "/get");
   app.set_url_auth("/json", HttpAuthType::Digest);
 
@@ -61,22 +46,39 @@ int main() {
   });
 
   app.route("/login_basic", [&](const HttpRequest &req, auto &resp) {
-    auto auth = req.auth<HttpBasicAuthType>();
-    if (auth && auth->verify_user()) {
-      resp.body("login successfully!").send();
-    } else
-      resp.auth(HttpAuthType::Basic).send();
+    if (GET_CONFIG(bool, "server", "enable_mysql")) {
+      auto auth = req.auth<HttpBasicSqlAuth>();
+      if (auth && auth->verify_user()) {
+        resp.body("login successfully!").send();
+        return;
+      }
+    } else {
+      auto auth = req.auth<HttpBasicLocalAuth>();
+      if (auth && auth->verify_user()) {
+        resp.body("login successfully!").send();
+        return;
+      }
+    }
+    resp.auth(HttpAuthType::Basic).send();
   });
 
   app.route("/login_digest", [&](const HttpRequest &req, auto &resp) {
-    auto auth = req.auth<HttpDigestAuthType>();
-    if (auth && auth->verify_user()) {
-      resp.body("login successfully!").send();
+    if (GET_CONFIG(bool, "server", "enable_mysql")) {
+      auto auth = req.auth<HttpDigestSqlAuth>();
+      if (auth && auth->verify_user()) {
+        resp.body("login successfully!").send();
+        return;
+      }
     } else {
-      resp.auth(HttpAuthType::Digest).send();
+      auto auth = req.auth<HttpDigestLocalAuth>();
+      if (auth && auth->verify_user()) {
+        resp.body("login successfully!").send();
+        return;
+      }
     }
+    resp.auth(HttpAuthType::Digest).send();
   });
 
-  app.start(InetAddress(5555));
+  app.start();
   return 0;
 }
