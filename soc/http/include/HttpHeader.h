@@ -11,7 +11,12 @@ namespace http {
 
 class HttpHeader {
 public:
+  HttpHeader() {}
+  explicit HttpHeader(std::string_view header);
+  int parse(std::string_view header);
+
   void add(const std::string &key, const std::string &value);
+  void remove(const std::string &key);
   std::optional<std::string> get(const std::string &key) const;
   size_t count() const noexcept { return headers_.size(); }
 
