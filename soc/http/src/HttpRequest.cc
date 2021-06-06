@@ -20,8 +20,16 @@ std::optional<std::string> HttpRequest::get(const std::string &key) const {
 }
 
 std::string HttpRequest::full_url() const noexcept {
-  return Env::instance().get("SCHEMA").value() + "//" +
-         Env::instance().get("SERVER_ADDR").value() +
+  std::string schema =
+      GET_CONFIG(bool, "server", "enable_https") ? "https" : "http";
+  std::string host;
+  if (EXIST_CONFIG("server", "server_hostname")) {
+    host = GET_CONFIG(std::string, "server", "server_hostname");
+  } else {
+    host = GET_CONFIG(std::string, "server", "listen_ip");
+  }
+  return schema + "//" + +":" + host +
+         std::to_string(GET_CONFIG(int, "server", "listen_port")) +
          EncodeUtil::url_decode(req_url_.c_str(), req_url_.size());
 }
 
@@ -168,6 +176,7 @@ HttpRequest::RetCode HttpRequest::parse_request_header() {
 
 HttpRequest::RetCode HttpRequest::parse_request_content() {
   std::string_view content(recver_->peek(), recver_->readable());
+  post_data_.append(content.data(), content.size());
   // Content-Type
   // 1. application/x-www-form-urlencoded
   // 2. multipart/form-data
@@ -187,7 +196,7 @@ void HttpRequest::parse_url_query() {
   std::string_view uls(req_url_.data(), req_url_.size());
   size_t pos = uls.find_first_of("?");
   if (pos != uls.npos) {
-    query_s_ = uls.substr(pos);
+    query_s_ = uls.substr(pos + 1);
     uls.remove_prefix(pos + 1);
     parse_key_value(uls, "=", "&", query_);
   }
@@ -198,10 +207,8 @@ void HttpRequest::parse_authorization() {
   if (auto x = header_.get("Authorization"); x.has_value()) {
     std::string_view auth = x.value();
     if (auth.starts_with("Basic")) {
+      auth_type_ = HttpAuthType::Basic;
       auth.remove_prefix(6);
-
-      auth_ = HttpBasicAuthType();
-      auto &basic_auth = std::get<HttpBasicAuthType>(auth_);
 
       std::string user_pass = EncodeUtil::base64_decode(auth);
       std::string_view user_pass_sv(user_pass.data(), user_pass.size());
@@ -210,8 +217,16 @@ void HttpRequest::parse_authorization() {
       std::string_view user = user_pass_sv.substr(0, pos);
       std::string_view pass = user_pass_sv.substr(pos + 1);
 
-      basic_auth.verify_user_private(user, pass);
+      if (GET_CONFIG(bool, "server", "enable_mysql")) {
+        auth_ = HttpBasicSqlAuth();
+        std::get<HttpBasicSqlAuth>(auth_).verify_user_private(user, pass);
+      } else {
+        auth_ = HttpBasicLocalAuth();
+        std::get<HttpBasicLocalAuth>(auth_).verify_user_private(user, pass);
+      }
+
     } else if (auth.starts_with("Digest")) {
+      auth_type_ = HttpAuthType::Digest;
       auth.remove_prefix(7);
 
       int state = 0;
@@ -264,8 +279,6 @@ void HttpRequest::parse_authorization() {
         }
       }
 
-      auth_ = HttpDigestAuthType();
-      auto &digest_auth = std::get<HttpDigestAuthType>(auth_);
       std::string_view method;
       if (method_ == HttpMethod::GET)
         method = "GET";
@@ -274,14 +287,30 @@ void HttpRequest::parse_authorization() {
       else if (method_ == HttpMethod::HEAD)
         method = "HEAD";
 
-      digest_auth.verify_user_private(
-          da_.count("username") ? da_["username"] : "", method,
-          da_.count("uri") ? da_["uri"] : "",
-          da_.count("nonce") ? da_["nonce"] : "",
-          da_.count("nc") ? da_["nc"] : "",
-          da_.count("cnonce") ? da_["cnonce"] : "",
-          da_.count("qop") ? da_["qop"] : "",
-          da_.count("response") ? da_["response"] : "");
+      if (GET_CONFIG(bool, "server", "enable_mysql")) {
+        auth_ = HttpDigestSqlAuth();
+        std::get<HttpDigestSqlAuth>(auth_).digest_info_ = x.value();
+        std::get<HttpDigestSqlAuth>(auth_).verify_user_private(
+            da_.count("username") ? da_["username"] : "", method,
+            da_.count("uri") ? da_["uri"] : "",
+            da_.count("nonce") ? da_["nonce"] : "",
+            da_.count("nc") ? da_["nc"] : "",
+            da_.count("cnonce") ? da_["cnonce"] : "",
+            da_.count("qop") ? da_["qop"] : "",
+            da_.count("response") ? da_["response"] : "");
+      } else {
+        auth_ = HttpDigestLocalAuth();
+        std::get<HttpDigestLocalAuth>(auth_).digest_info_ = x.value();
+        std::get<HttpDigestLocalAuth>(auth_).verify_user_private(
+            da_.count("username") ? da_["username"] : "", method,
+            da_.count("uri") ? da_["uri"] : "",
+            da_.count("nonce") ? da_["nonce"] : "",
+            da_.count("nc") ? da_["nc"] : "",
+            da_.count("cnonce") ? da_["cnonce"] : "",
+            da_.count("qop") ? da_["qop"] : "",
+            da_.count("response") ? da_["response"] : "");
+      }
+
     } else {
       // other authorization...
     }
