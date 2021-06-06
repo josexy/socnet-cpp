@@ -8,9 +8,11 @@
 namespace soc {
 namespace net {
 
+constexpr static const size_t kMaxTranBuffer = 4096;
+
 class Buffer {
 public:
-  explicit Buffer(size_t init_size = 2048)
+  explicit Buffer(size_t init_size = kMaxTranBuffer)
       : buffer_(init_size), rindex_(0), windex_(0) {}
 
   size_t readable() const noexcept { return windex_ - rindex_; }
