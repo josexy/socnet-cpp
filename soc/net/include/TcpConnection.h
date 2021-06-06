@@ -3,26 +3,19 @@
 
 #include <functional>
 
-#include "../../utility/include/MacroCtl.h"
 #include "../include/ServerSocket.h"
 #include "Buffer.h"
-
-#ifdef SUPPORT_SSL_LIB
 #include "SSL.h"
-#endif
 
 namespace soc {
 namespace net {
+
+constexpr static const size_t kBufferSize = 4096;
 
 class TcpConnection;
 using TcpConnectionPtr = TcpConnection *;
 class TcpConnection {
 public:
-#ifdef SUPPORT_SSL_LIB
-  SSL *ssl() const { return ssl_; }
-  void set_ssl(SSL *ssl) { ssl_ = ssl; }
-#endif
-
   void initialize(int connfd);
 
   int fd() const noexcept { return connfd_; }
@@ -31,6 +24,9 @@ public:
 
   int read(int *err);
   int write(int *err);
+
+  SSL *ssl() const noexcept { return ssl_; }
+  void set_ssl(SSL *ssl) { ssl_ = ssl; }
 
   bool disconnected() const noexcept { return disconnected_; }
   void disconnected(bool is) { disconnected_ = is; }
@@ -47,9 +43,7 @@ public:
 private:
   int connfd_;
 
-#ifdef SUPPORT_SSL_LIB
   SSL *ssl_;
-#endif
 
   bool disconnected_;
   bool keep_alive_;
