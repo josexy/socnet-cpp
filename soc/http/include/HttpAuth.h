@@ -24,9 +24,14 @@ public:
 
   bool verify_user() const noexcept { return verify_successed_; }
 
+  const std::string &username() const noexcept { return user_; }
+  const std::string &password() const noexcept { return pass_; }
+
 private:
   void verify_user_private(const std::string_view &user,
                            const std::string_view &pass) {
+    user_ = std::string(user.data(), user.size());
+    pass_ = std::string(pass.data(), pass.size());
     auto x = HttpPassStore<PassStore>::instance().fetch_password(user);
     if (!x.first)
       return;
@@ -36,6 +41,8 @@ private:
   }
 
   bool verify_successed_ = false;
+  std::string user_;
+  std::string pass_;
 };
 
 template <class PassStore>
@@ -44,6 +51,8 @@ public:
   friend class HttpRequest;
 
   bool verify_user() const noexcept { return verify_successed_; }
+
+  const std::string &digest_info() const noexcept { return digest_info_; }
 
 private:
   void verify_user_private(
@@ -96,6 +105,7 @@ private:
 
 private:
   bool verify_successed_ = false;
+  std::string digest_info_;
 };
 
 } // namespace http

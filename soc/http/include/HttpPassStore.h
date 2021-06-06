@@ -4,9 +4,12 @@
 #include "../../modules/mysql/include/MYSQL.h"
 #include "../../utility/include/EncodeUtil.h"
 #include "../../utility/include/FileLoader.h"
-#include "../../utility/include/MacroCtl.h"
+
 namespace soc {
 namespace http {
+
+constexpr static const char *kPassFile = "./pass_store/user_password";
+constexpr static const char *kRealm = "socnet@test";
 
 template <class DerivedStore> class HttpPassStore {
 public:
@@ -52,8 +55,6 @@ private:
   std::unordered_map<std::string, std::string> user_pass_tb_;
 };
 
-#ifdef SUPPORT_MYSQL_LIB
-
 class HttpSqlPassStore : public HttpPassStore<HttpSqlPassStore> {
 public:
   template <class> friend class soc::http::HttpPassStore;
@@ -61,8 +62,8 @@ public:
   std::pair<bool, std::string>
   fetch_password(const std::string_view &user) const {
     std::string query = "select `password` from " +
-                        Env::instance().get("MYSQL_DB").value() + "." +
-                        Env::instance().get("MYSQL_TB").value() +
+                        GET_CONFIG(std::string, "mysql", "database") + "." +
+                        GET_CONFIG(std::string, "mysql", "table") +
                         " where `user`= '" + std::string(user) + "'";
 
     if (!MYSQLManager::instance().execute(query)) {
@@ -77,7 +78,6 @@ public:
     return std::make_pair(true, hash_password);
   }
 };
-#endif
 } // namespace http
 } // namespace soc
 
