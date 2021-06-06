@@ -1,5 +1,4 @@
 build/.*
 build/CMake*
 build/cmake*
-build/Makefile
 build/socnet
