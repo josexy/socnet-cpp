@@ -28,7 +28,7 @@ std::string HttpRequest::full_url() const noexcept {
   } else {
     host = GET_CONFIG(std::string, "server", "listen_ip");
   }
-  return schema + "//" + +":" + host +
+  return schema + ":" + "//" + host + ":" +
          std::to_string(GET_CONFIG(int, "server", "listen_port")) +
          EncodeUtil::url_decode(req_url_.c_str(), req_url_.size());
 }

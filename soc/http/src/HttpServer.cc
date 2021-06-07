@@ -127,8 +127,8 @@ void HttpServer::set_url_auth(const std::string &origin_url,
 void HttpServer::enable_cgi(bool on) {
   if (on) {
     cgi_bin_ = GET_CONFIG(std::string, "cgi", "cgi_bin");
-    enable_cgi_ = on;
   }
+  enable_cgi_ = on;
 }
 
 bool HttpServer::handle_msg(TcpConnectionPtr conn) {
@@ -141,13 +141,11 @@ bool HttpServer::handle_msg(TcpConnectionPtr conn) {
   }
 
   auto code = req->parse_request();
-
   if (conn->disconnected() || conn->context() == nullptr) {
     if (req)
       delete req;
     return true;
   }
-
   HttpResponse resp(conn);
   if (code == HttpRequest::BAD_REQUEST) {
     if (handle_bad_request(req, resp)) {
@@ -240,7 +238,7 @@ bool HttpServer::handle_redirect(HttpRequest *req, HttpResponse &resp) {
   if (x->second.back() == '/')
     x->second.pop_back();
 
-  resp.status_code(301).header("Location", x->second + req->query_s()).send();
+  resp.redirect(301, x->second + req->query_s());
   return true;
 }
 

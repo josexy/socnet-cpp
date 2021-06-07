@@ -168,6 +168,7 @@ public:
   }
 
   decltype(auto) msg_buf() { return &msg_buf_; }
+  void redirect(int code, const std::string &url);
   void send();
 
 private:

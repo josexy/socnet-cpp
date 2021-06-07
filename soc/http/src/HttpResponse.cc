@@ -117,6 +117,10 @@ HttpResponse::HttpResponse(net::TcpConnectionPtr conn)
       builder_(new HttpResponseBuilder(
           static_cast<HttpRequest *>(conn->context()), conn->sender())) {}
 
+void HttpResponse::redirect(int code, const std::string &url) {
+  status_code(code).header("Location", url).send();
+}
+
 void HttpResponse::send() {
   if (conn_ == nullptr)
     return;
