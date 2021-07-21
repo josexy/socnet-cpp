@@ -20,7 +20,7 @@ public:
     return config;
   }
 
-  const Values &get(const std::string &key, const std::string &subKey);
+  const Values &get(const std::string &key, const std::string &subKey) const;
   bool exist(const std::string &key, const std::string &subKey);
 
   ~AppConfig() {}

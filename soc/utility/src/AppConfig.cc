@@ -45,7 +45,7 @@ AppConfig::AppConfig(const std::string &config) {
 }
 
 const AppConfig::Values &AppConfig::get(const std::string &key,
-                                        const std::string &subKey) {
+                                        const std::string &subKey) const {
   return config_.at(key).at(subKey);
 }
 

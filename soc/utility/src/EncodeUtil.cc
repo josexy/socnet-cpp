@@ -9,7 +9,7 @@
 
 using namespace soc;
 
-void EncodeUtil::gzipcompress(net::Buffer *tmp, net::Buffer *buf,
+void EncodeUtil::gzipCompress(net::Buffer *tmp, net::Buffer *buf,
                               const std::function<void(size_t)> &f,
                               const std::function<void()> &g) {
   std::vector<uint8_t> output;
@@ -45,12 +45,11 @@ void EncodeUtil::gzipcompress(net::Buffer *tmp, net::Buffer *buf,
   buf->append<uint8_t>(output.begin(), output.end());
 }
 
-unsigned char *EncodeUtil::md5_hash(void *data, size_t n,
-                                    unsigned char md[16]) {
+unsigned char *EncodeUtil::md5Hash(void *data, size_t n, unsigned char md[16]) {
   return ::MD5(reinterpret_cast<const unsigned char *>(data), n, md);
 }
 
-std::string EncodeUtil::md5_hash(const std::string_view &data) {
+std::string EncodeUtil::md5Hash(std::string_view data) {
   unsigned char md[16];
   ::MD5(reinterpret_cast<const unsigned char *>(data.data()), data.size(), md);
   std::string v(32, 0);
@@ -59,13 +58,12 @@ std::string EncodeUtil::md5_hash(const std::string_view &data) {
   return v;
 }
 
-bool EncodeUtil::md5_hash_equal(const std::string_view &data,
-                                const std::string_view &hashv) {
-  std::string hashv2 = md5_hash(data);
+bool EncodeUtil::md5HashEqual(std::string_view data, std::string_view hashv) {
+  std::string hashv2 = md5Hash(data);
   return 0 == ::memcmp(hashv2.data(), hashv.data(), hashv2.size());
 }
 
-std::string EncodeUtil::md5_hash_file(const char *filename) {
+std::string EncodeUtil::md5HashFile(const char *filename) {
   FILE *fp = NULL;
   fp = ::fopen(filename, "rb");
   if (fp == NULL)
@@ -89,36 +87,58 @@ std::string EncodeUtil::md5_hash_file(const char *filename) {
   return v;
 }
 
-std::string EncodeUtil::base64_encode(const std::string_view &data) {
-  BIO *bmem = NULL;
-  BIO *b64 = NULL;
-  BUF_MEM *bptr = NULL;
-  b64 = ::BIO_new(::BIO_f_base64());
-  ::BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-  bmem = ::BIO_new(::BIO_s_mem());
-  b64 = ::BIO_push(b64, bmem);
-  ::BIO_write(b64, data.data(), data.size());
-  BIO_flush(b64);
-  BIO_get_mem_ptr(b64, &bptr);
+unsigned int EncodeUtil::murmurHash2(std::string_view s) {
+  constexpr unsigned int m = 0x5bd1e995;
+  constexpr int r = 24;
+  // Initialize the hash to a 'random' value
+  size_t len = s.size();
+  unsigned int h = 0xEE6B27EB ^ len;
 
-  std::string value(bptr->data, bptr->length);
-  ::BIO_free_all(b64);
-  return value;
+  // Mix 4 bytes at a time into the hash
+
+  const unsigned char *data = (const unsigned char *)s.data();
+
+  while (len >= 4) {
+    unsigned int k = *(unsigned int *)data;
+
+    k *= m;
+    k ^= k >> r;
+    k *= m;
+
+    h *= m;
+    h ^= k;
+
+    data += 4;
+    len -= 4;
+  }
+
+  // Handle the last few bytes of the input array
+  switch (len) {
+  case 3:
+    h ^= data[2] << 16;
+  case 2:
+    h ^= data[1] << 8;
+  case 1:
+    h ^= data[0];
+    h *= m;
+  };
+
+  // Do a few final mixes of the hash to ensure the last few
+  // bytes are well-incorporated.
+  h ^= h >> 13;
+  h *= m;
+  h ^= h >> 15;
+  return h;
 }
 
-std::string EncodeUtil::base64_decode(const std::string_view &data) {
-  BIO *b64 = NULL;
-  BIO *bmem = NULL;
-  b64 = ::BIO_new(BIO_f_base64());
-  ::BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-  bmem = ::BIO_new_mem_buf(data.data(), data.size());
-  bmem = ::BIO_push(b64, bmem);
+std::string EncodeUtil::base64Encode(std::string_view data) {
+  return boost::beast::detail::base64_encode(
+      reinterpret_cast<std::uint8_t const *>(data.data()), data.size());
+}
 
-  std::string value(data.size(), 0);
-  int n = ::BIO_read(bmem, value.data(), data.size());
-  ::BIO_free_all(bmem);
-  value.resize(n);
-  return value;
+std::string EncodeUtil::base64Decode(std::string_view data) {
+  return boost::beast::detail::base64_decode(
+      std::string(data.data(), data.size()));
 }
 
 unsigned char EncodeUtil::hex2dec(char c) {
@@ -139,7 +159,7 @@ char EncodeUtil::dec2hex(char c) {
   return c;
 }
 
-std::string EncodeUtil::url_decode(const char *value, size_t size) {
+std::string EncodeUtil::urlDecode(const char *value, size_t size) {
   std::string escaped;
   for (size_t i = 0; i < size; ++i) {
     if (value[i] == '%' && i + 2 < size && isxdigit(value[i + 1]) &&
@@ -157,15 +177,15 @@ std::string EncodeUtil::url_decode(const char *value, size_t size) {
   return escaped;
 }
 
-std::string EncodeUtil::url_decode(const std::string_view &value) {
-  return url_decode(value.data(), value.size());
+std::string EncodeUtil::urlDecode(std::string_view value) {
+  return urlDecode(value.data(), value.size());
 }
 
-std::string EncodeUtil::url_decode(const char *value) {
-  return url_decode(value, strlen(value));
+std::string EncodeUtil::urlDecode(const char *value) {
+  return urlDecode(value, strlen(value));
 }
 
-std::string EncodeUtil::url_encode(const char *value, size_t size) {
+std::string EncodeUtil::urlEncode(const char *value, size_t size) {
   std::string escaped;
 
   for (size_t i = 0; i < size; i++) {
@@ -184,30 +204,30 @@ std::string EncodeUtil::url_encode(const char *value, size_t size) {
   return escaped;
 }
 
-std::string EncodeUtil::url_encode(const std::string_view &value) {
-  return url_encode(value.data(), value.size());
+std::string EncodeUtil::urlEncode(std::string_view value) {
+  return urlEncode(value.data(), value.size());
 }
 
-std::string EncodeUtil::url_encode(const char *value) {
-  return url_encode(value, strlen(value));
+std::string EncodeUtil::urlEncode(const char *value) {
+  return urlEncode(value, strlen(value));
 }
 
-void EncodeUtil::tolowers(char *s, size_t size) {
+void EncodeUtil::toLowers(char *s, size_t size) {
   for (size_t i = 0; i < size; i++)
     if (isupper(s[i]))
       s[i] = tolower(s[i]);
 }
 
-void EncodeUtil::touppers(char *s, size_t size) {
+void EncodeUtil::toUppers(char *s, size_t size) {
   for (size_t i = 0; i < size; i++)
     if (islower(s[i]))
       s[i] = toupper(s[i]);
 }
 
-std::string EncodeUtil::generate_randrom_string(size_t n) {
+std::string EncodeUtil::genRandromStr(size_t n) {
   std::string str;
   str.resize(n);
-  constexpr static const char *alpha =
+  static constexpr const char *alpha =
       "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
   for (size_t i = 0; i < n; ++i)
     str[i] = alpha[::rand() % 62];
