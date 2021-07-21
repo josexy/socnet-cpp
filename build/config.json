@@ -3,11 +3,9 @@
         "listen_ip": "0.0.0.0",
         "listen_port": 5555,
         "idle_timeout": 2000,
-        "server_hostname": "test",
+        "server_hostname": "localhost",
         "enable_https": false,
-        "enable_mysql": false,
         "enable_php": true,
-        "enable_simple_cgi": false,
         "default_page": [
             "index.php",
             "index.html"
@@ -17,17 +15,6 @@
         "cert_file": "./ssl/cert.crt",
         "private_key_file": "./ssl/private.pem",
         "password": ""
-    },
-    "mysql": {
-        "host": "127.0.0.1",
-        "port": 3306,
-        "username": "root",
-        "password": "root",
-        "database": "db",
-        "table": "tb"
-    },
-    "cgi": {
-        "cgi_bin": "cgi-bin"
     },
     "php-fpm": {
         "server_ip": "127.0.0.1",
