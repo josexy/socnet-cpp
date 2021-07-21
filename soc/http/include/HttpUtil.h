@@ -1,9 +1,7 @@
-
 #ifndef SOC_HTTP_HTTPUTIL_H
 #define SOC_HTTP_HTTPUTIL_H
 
-#include <string>
-#include <unordered_map>
+#include "../../utility/include/AppConfig.h"
 
 namespace soc {
 namespace http {
@@ -14,9 +12,6 @@ inline constexpr uint64_t hash_ext(const char *s, size_t i, size_t l,
 }
 inline uint64_t hash_ext(const std::string_view &s) noexcept {
   return hash_ext(s.data(), 0, s.size(), 0);
-}
-inline constexpr uint64_t hash_ext(const char *s, size_t i, size_t n) noexcept {
-  return hash_ext(s + i, 0, n, 0);
 }
 inline constexpr uint64_t operator""_h(const char *s, size_t n) noexcept {
   return hash_ext(s, 0, n, 0);
@@ -77,8 +72,6 @@ enum class HttpVersion {
   HTTP_1_1 = 0x11,
   HTTP_2_0 = 0x20 /*not support HTTP 2.0*/
 };
-
-enum class HttpAuthType { Basic = 0x01, Digest = 0x02 };
 
 } // namespace http
 } // namespace soc
