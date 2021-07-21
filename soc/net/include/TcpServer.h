@@ -2,80 +2,81 @@
 #define SOC_NET_TCPSERVER_H
 
 #include "../../utility/include/AppConfig.h"
+#include "EPoller.h"
+#include "ServerSsl.h"
 #include "TcpConnection.h"
-#include "TimerQueue.h"
-#include <atomic>
-#include <memory>
-#include <sys/epoll.h>
-#include <sys/eventfd.h>
+#include <signal.h>
+
 namespace soc {
 namespace net {
 
-namespace {
-constexpr static auto kServerEvent = EPOLLRDHUP;
-constexpr static auto kConnEvent = EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
-} // namespace
-
-class TimerQueue;
 class TcpServer {
 public:
-  using ConnCb = std::function<void(TcpConnectionPtr)>;
-  using MsgCb = std::function<bool(TcpConnectionPtr)>;
-  using CloseCb = std::function<void(TcpConnectionPtr)>;
+  using NewConnectionCallback = std::function<void(TcpConnection *)>;
+  using MessageCallback = std::function<bool(TcpConnection *)>;
+  using ClosedConnectionCallback = std::function<void(TcpConnection *)>;
 
   TcpServer();
   ~TcpServer();
 
-  InetAddress address() const { return ServerSocket::sockname(socket_.fd()); }
+  InetAddress address() const { return option::sockname(svr_socket_->fd()); }
 
   void start(const InetAddress &address);
   void quit();
   void wakeup();
 
-  void set_idle_timeout(int millsecond) { idle_timeout_ = millsecond; }
-  void set_new_conn_cb(const ConnCb &cb) { new_conn_cb_ = std::move(cb); }
-  void set_msg_cb(const MsgCb &cb) { msg_cb_ = std::move(cb); }
-  void set_close_conn_cb(const CloseCb &cb) { close_cb_ = std::move(cb); }
+  void setIdleTime(int millsecond) { idle_timeout_ = millsecond; }
 
-  void set_https_certificate(const char *cert_file,
-                             const char *private_key_file,
-                             const char *password = nullptr);
+  void setNewConnectionCallback(const NewConnectionCallback &cb) {
+    new_conn_cb_ = cb;
+  }
+  void setMessageCallback(const MessageCallback &cb) { msg_cb_ = cb; }
+  void setClosedConnectionCallback(const ClosedConnectionCallback &cb) {
+    closed_cb_ = cb;
+  }
 
-private:
-  void loop();
+  void setCertificate(const std::string &cert_file,
+                      const std::string &privatekey_file,
+                      const std::string &password);
 
-  void handle_server_listen();
-  void handle_conn_read(TcpConnectionPtr conn);
-  void handle_conn_write(TcpConnectionPtr conn);
-  void handle_conn_close(TcpConnectionPtr conn);
-  void handle_wakeup();
-  void handle_timeout();
+  void createSessionTimer(const TimeStamp &);
 
-  void handle_connected_conn(int connfd, SSL *ssl);
-  void handle_connected_conn(int connfd);
-
-  void on_write(TcpConnectionPtr conn);
-  void on_read(TcpConnectionPtr conn);
-
-  void add_fd(int fd, int event);
-  void mod_fd(int fd, int event);
-  void del_fd(int fd);
+  TimerQueue *getClientTimer() const noexcept { return alive_timer_.get(); }
+  TimerQueue *getSessionTimer() const noexcept { return session_timer_.get(); }
+  EPoller *getEPoller() const noexcept { return poller_.get(); }
 
 private:
-  int epfd_;
+  void handleServerAccept();
+  void handleRead(int);
+  void handleWrite(int);
+  void handleClose(int);
+  void handleTimeout(int);
+  void handleWakeup();
+
+  void handleConnected(int, Channel *);
+  void handleConnectionRead(TcpConnection *);
+  void handleConnectionWrite(TcpConnection *);
+  void handleConnectionClose(TcpConnection *);
+
+  void onWrite(TcpConnection *);
+  void onRead(TcpConnection *);
+
+private:
   int evfd_;
   int idle_timeout_;
-  ServerSocket socket_;
   std::atomic<bool> quit_;
 
-  std::unique_ptr<SSLTls> ssl_;
-  std::vector<epoll_event> events_;
-  std::unordered_map<int, TcpConnection> conns_;
-  TimerQueue tq_;
+  std::unique_ptr<ServerSocket> svr_socket_;
+  std::unique_ptr<EPoller> poller_;
+  std::unique_ptr<TimerQueue> alive_timer_;
+  std::unique_ptr<TimerQueue> session_timer_;
+  std::unique_ptr<ServerSsl> ssl_;
 
-  ConnCb new_conn_cb_;
-  MsgCb msg_cb_;
-  CloseCb close_cb_;
+  std::unordered_map<int, TcpConnection> conns_;
+
+  NewConnectionCallback new_conn_cb_;
+  MessageCallback msg_cb_;
+  ClosedConnectionCallback closed_cb_;
 };
 } // namespace net
 

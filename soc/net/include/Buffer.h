@@ -2,17 +2,16 @@
 #define SOC_NET_BUFFER_H
 
 #include <errno.h>
+#include <string>
 #include <sys/uio.h>
-
 #include <vector>
+
 namespace soc {
 namespace net {
 
-constexpr static const size_t kMaxTranBuffer = 4096;
-
 class Buffer {
 public:
-  explicit Buffer(size_t init_size = kMaxTranBuffer)
+  explicit Buffer(size_t init_size = 4096)
       : buffer_(init_size), rindex_(0), windex_(0) {}
 
   size_t readable() const noexcept { return windex_ - rindex_; }
@@ -23,12 +22,12 @@ public:
   char *begin_write() noexcept { return &*buffer_.begin() + windex_; }
   const char *peek() const noexcept { return begin() + rindex_; }
 
-  void retired_all() { rindex_ = windex_ = 0; }
+  void retiredAll() { rindex_ = windex_ = 0; }
   void retired(size_t len) noexcept {
     if (len < readable())
       rindex_ += len;
     else
-      retired_all();
+      retiredAll();
   }
 
   template <class T>
@@ -37,27 +36,29 @@ public:
     int len = end - begin;
     if (len <= 0)
       return;
-    ensure_writable(len);
+    ensureWritable(len);
     std::copy(begin, end, buffer_.data() + windex_);
-    has_written(len);
+    hasWritten(len);
   }
 
   void append(const char *data, size_t len) {
     if (len <= 0)
       return;
-    ensure_writable(len);
+    ensureWritable(len);
     std::copy(data, data + len, buffer_.data() + windex_);
-    has_written(len);
+    hasWritten(len);
   }
 
-  void ensure_writable(size_t len) {
+  void append(std::string_view data) { append(data.data(), data.size()); }
+
+  void ensureWritable(size_t len) {
     if (writable() < len)
-      make_space(len);
+      makeSpace(len);
   }
 
-  void has_written(size_t len) { windex_ += len; }
+  void hasWritten(size_t len) { windex_ += len; }
 
-  int read_fd(int fd, int *err) {
+  int readFd(int fd, int *err) {
     char buff[65535];
     struct iovec iov[2];
     size_t w_len = writable();
@@ -80,7 +81,7 @@ public:
   }
 
 private:
-  void make_space(size_t len) {
+  void makeSpace(size_t len) {
     if (rindex_ + writable() < len) {
       buffer_.resize(windex_ + len + 1);
     } else {

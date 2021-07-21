@@ -11,23 +11,7 @@
 namespace soc {
 namespace net {
 
-class SpinLock {
-public:
-  SpinLock() : lock_(ATOMIC_FLAG_INIT) {}
-  SpinLock(const SpinLock &) = delete;
-  SpinLock(SpinLock &&) = delete;
-
-  void lock() {
-    while (lock_.test_and_set(std::memory_order_relaxed))
-      std::this_thread::yield();
-  }
-  void unlock() { lock_.clear(std::memory_order_relaxed); }
-
-private:
-  std::atomic_flag lock_;
-};
-
-template <class LockerType = std::mutex> class ThreadPool {
+class ThreadPool {
 public:
   using Task = std::function<void()>;
 
@@ -45,7 +29,7 @@ public:
     if (!running_)
       return;
     {
-      std::lock_guard<LockerType> lock(locker_);
+      std::lock_guard<std::mutex> lock(locker_);
       tasks_.emplace(task);
     }
     cond_.notify_one();
@@ -74,7 +58,7 @@ private:
     while (true) {
       Task task;
       {
-        std::unique_lock<LockerType> lock(locker_);
+        std::unique_lock<std::mutex> lock(locker_);
         while (running_ && tasks_.empty()) {
           cond_.wait(lock);
         }
@@ -90,8 +74,8 @@ private:
 private:
   std::queue<Task> tasks_;
   std::atomic<bool> running_;
-  LockerType locker_;
-  std::condition_variable_any cond_;
+  std::mutex locker_;
+  std::condition_variable cond_;
   std::vector<std::thread> threads_;
 };
 } // namespace net

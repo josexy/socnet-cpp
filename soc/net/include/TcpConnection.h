@@ -1,54 +1,52 @@
 #ifndef SOC_NET_TCPCONNECTION_H
 #define SOC_NET_TCPCONNECTION_H
 
-#include <functional>
-
 #include "../include/ServerSocket.h"
-#include "Buffer.h"
-#include "SSL.h"
+#include "Channel.h"
+#include <memory>
 
 namespace soc {
 namespace net {
 
-constexpr static const size_t kBufferSize = 4096;
+static constexpr const size_t kBufferSize = 4096;
 
-class TcpConnection;
-using TcpConnectionPtr = TcpConnection *;
 class TcpConnection {
 public:
+  TcpConnection();
+
   void initialize(int connfd);
 
   int fd() const noexcept { return connfd_; }
-  InetAddress local_address() { return ServerSocket::sockname(connfd_); }
-  InetAddress peer_address() { return ServerSocket::peername(connfd_); }
+  InetAddress localAddr() { return option::sockname(connfd_); }
+  InetAddress peerAddr() { return option::peername(connfd_); }
 
-  int read(int *err);
-  int write(int *err);
+  std::pair<int, int> read();
+  std::pair<int, int> write();
 
-  SSL *ssl() const noexcept { return ssl_; }
-  void set_ssl(SSL *ssl) { ssl_ = ssl; }
+  std::pair<int, bool> readAgain();
+  std::pair<int, bool> writeAgain();
+
+  Channel *channel() const noexcept { return channel_.get(); }
+  void setChannel(Channel *channel) { channel_.reset(channel); }
 
   bool disconnected() const noexcept { return disconnected_; }
-  void disconnected(bool is) { disconnected_ = is; }
+  void setDisconnected(bool is) { disconnected_ = is; }
 
-  bool keep_alive() const noexcept { return keep_alive_; }
-  void keep_alive(bool is) { keep_alive_ = is; }
+  bool keepAlive() const noexcept { return keep_alive_; }
+  void setKeepAlive(bool is) { keep_alive_ = is; }
 
-  void *context() { return context_; }
-  void context(void *context) { context_ = context; }
+  void *context() const noexcept { return context_; }
+  void setContext(void *context) { context_ = context; }
 
   decltype(auto) sender() { return &sender_; }
   decltype(auto) recver() { return &recver_; }
 
 private:
   int connfd_;
-
-  SSL *ssl_;
-
   bool disconnected_;
   bool keep_alive_;
-
   void *context_;
+  std::shared_ptr<Channel> channel_;
   Buffer sender_;
   Buffer recver_;
 };

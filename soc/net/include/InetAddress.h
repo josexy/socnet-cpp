@@ -14,13 +14,9 @@ public:
   explicit InetAddress(const std::string &ip, uint16_t port = 0);
 
   std::string ip() const noexcept;
-  std::string port_s() const noexcept;
   uint16_t port() const noexcept { return ::htons(sockin_.sin_port); }
-  struct sockaddr *sockaddr() const noexcept {
-    return (struct sockaddr *)&sockin_;
-  }
-  void set_sockaddr(const sockaddr_in &sockaddr) { sockin_ = sockaddr; }
-  std::string to_string() const { return ip() + ":" + port_s(); }
+  sockaddr *saddr() const noexcept { return (struct sockaddr *)&sockin_; }
+  std::string toString() const { return ip() + ":" + std::to_string(port()); }
 
 private:
   sockaddr_in sockin_;

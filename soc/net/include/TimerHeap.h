@@ -1,113 +1,100 @@
 #ifndef SOC_NET_TIMERHEAP_H
 #define SOC_NET_TIMERHEAP_H
 
+#include "TimeStamp.h"
 #include <algorithm>
-
-#include "../../utility/include/timestamp.h"
+#include <mutex>
 
 namespace soc {
 namespace net {
 
-using TimeoutCb = std::function<void()>;
+using TimeoutCallback = std::function<void()>;
 
 struct Timer {
   int fd;
-  timestamp ts;
-  TimeoutCb cb;
-  Timer(int fd, const timestamp &ts, const TimeoutCb &cb)
-      : fd(fd), ts(ts), cb(cb) {}
-  bool operator<(const Timer &t) const { return t.ts < ts; }
+  TimeStamp timestamp;
+  TimeoutCallback callback;
+
+  Timer() {}
+  explicit Timer(int fd, const TimeStamp &ts, const TimeoutCallback &cb)
+      : fd(fd), timestamp(ts), callback(cb) {}
+  bool operator<(const Timer &other) const {
+    return other.timestamp < timestamp;
+  }
 };
 
 class TimerHeap {
 public:
-  void push(const Timer &value) {
-    if (fds_.count(value.fd) == 0) {
-      c_.emplace_back(value);
-      fds_[value.fd] = n_;
-      n_++;
-      if (n_ == 1)
-        return;
-      up_adjust(n_ - 1);
-    } else {
-      // Timer existed
-      size_t i = fds_[value.fd];
-      // Reset expired time
-      c_[i].ts = value.ts;
-      c_[i].cb = value.cb;
-      // Try to down adjust
-      if (!down_adjust(i)) {
-        // Try to up adjust
-        up_adjust(i);
-      }
-    }
-  }
+  ~TimerHeap() { clear(); }
 
-  void emplace(int fd, const timestamp &ts, const TimeoutCb &cb) {
-    if (fds_.count(fd) == 0) {
-      c_.emplace_back(fd, ts, cb);
-      fds_[fd] = n_;
+  void push(const Timer &timer) {
+    std::lock_guard<std::mutex> locker(mutex_);
+    if (fds_.count(timer.fd) == 0) {
+      c_.emplace_back(timer);
+      fds_[timer.fd] = n_;
       n_++;
       if (n_ == 1)
         return;
-      up_adjust(n_ - 1);
+      upAdjust(n_ - 1);
     } else {
       // Timer existed
-      size_t i = fds_[fd];
+      size_t i = fds_[timer.fd];
       // Reset expired time
-      c_[i].ts = ts;
-      c_[i].cb = cb;
+      c_[i].timestamp = timer.timestamp;
+      c_[i].callback = timer.callback;
       // Try to down adjust
-      if (!down_adjust(i)) {
+      if (!downAdjust(i)) {
         // Try to up adjust
-        up_adjust(i);
+        upAdjust(i);
       }
     }
   }
 
   void pop() {
-    if (empty())
-      std::exception();
+    std::lock_guard<std::mutex> locker(mutex_);
+    if (n_ == 0)
+      throw std::exception();
     del(0);
   }
-
   Timer &top() {
-    if (empty())
+    std::lock_guard<std::mutex> locker(mutex_);
+    if (n_ == 0)
       throw std::exception();
     return c_[0];
   }
-
-  bool empty() const noexcept { return size() == 0; }
-  size_t size() const noexcept { return n_; }
-  void clear() noexcept {
+  bool empty() const noexcept {
+    std::lock_guard<std::mutex> locker(mutex_);
+    return n_ == 0;
+  }
+  size_t size() const noexcept {
+    std::lock_guard<std::mutex> locker(mutex_);
+    return n_;
+  }
+  void clear() {
+    std::lock_guard<std::mutex> locker(mutex_);
     c_.clear();
     fds_.clear();
   }
 
-  void adjust(int fd, const timestamp &ts) {
-    if (auto x = fds_.find(fd); x != fds_.end()) {
+  void adjust(const Timer &timer) {
+    std::lock_guard<std::mutex> locker(mutex_);
+    if (auto x = fds_.find(timer.fd); x != fds_.end()) {
       // reset expired time
-      c_[x->second].ts = ts;
-      down_adjust(x->second);
-    }
-  }
-
-  void erase(int fd) {
-    if (auto x = fds_.find(fd); x != fds_.end()) {
-      del(x->second);
+      c_[x->second].timestamp = timer.timestamp;
+      downAdjust(x->second);
     }
   }
 
 private:
   void del(size_t i) {
-    if (empty())
+    if (n_ == 0)
       return;
-    std::swap(c_[i], c_[size() - 1]);
+    std::swap(c_[i], c_[n_ - 1]);
     n_--;
     // Try to down adjust
-    if (!down_adjust(i)) {
+    if (!downAdjust(i)) {
       // otherwise, try to up adjust
-      up_adjust(i);
+      upAdjust(i);
     }
     // Erase back Timer
     fds_.erase(c_.back().fd);
@@ -115,7 +102,7 @@ private:
   }
 
   // for insert
-  void up_adjust(size_t i) {
+  void upAdjust(size_t i) {
     size_t parent = (i - 1) / 2;
 
     // last timer
@@ -139,16 +126,16 @@ private:
   }
 
   // for delete
-  bool down_adjust(size_t i) {
+  bool downAdjust(size_t i) {
     size_t x = i;
     size_t child = i * 2 + 1;
     const Timer v = c_[i];
     while (true) {
-      if (child >= size())
+      if (child >= n_)
         break;
 
       // choose a min expired timer
-      if (child + 1 < size() && c_[child] < c_[child + 1])
+      if (child + 1 < n_ && c_[child] < c_[child + 1])
         child++;
 
       // if current expired timer < the child expired tiemr
@@ -169,8 +156,9 @@ private:
 
 private:
   std::vector<Timer> c_;
-  std::unordered_map<int, int> fds_;
   size_t n_ = 0;
+  std::unordered_map<int, int> fds_;
+  mutable std::mutex mutex_;
 };
 
 } // namespace net

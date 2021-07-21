@@ -1,62 +1,68 @@
 #include "../include/TcpConnection.h"
 
-#include <unistd.h>
-
 using namespace soc::net;
 
+TcpConnection::TcpConnection()
+    : disconnected_(false), keep_alive_(false), context_(nullptr),
+      channel_(nullptr) {}
+
 void TcpConnection::initialize(int connfd) {
-  sender_.retired_all();
-  recver_.retired_all();
+  sender_.retiredAll();
+  recver_.retiredAll();
 
   connfd_ = connfd;
   disconnected_ = keep_alive_ = false;
   context_ = nullptr;
-  ssl_ = nullptr;
+  channel_ = nullptr;
 }
 
-int TcpConnection::read(int *err) {
+std::pair<int, int> TcpConnection::read() {
   int n = -1;
-  if (ssl_) {
-    char buffer[kBufferSize];
-    while ((n = ::SSL_read(ssl_, buffer, kBufferSize)) > 0) {
-      recver_.append(buffer, n);
-    }
-    *err = ::SSL_get_error(ssl_, n);
-  } else {
-    while ((n = recver_.read_fd(connfd_, err)) > 0) {
-      // while ((n = ::read(connfd_, buffer, kBufferSize)) > 0) {
-      // recver_.append(buffer, n);
-    }
-    // *err = errno;
+  char buffer[kBufferSize];
+  while ((n = channel_->read(buffer, kBufferSize)) > 0) {
+    recver_.append(buffer, n);
   }
-  return n;
+
+  return std::make_pair(n, channel_->getError(n));
 }
 
-int TcpConnection::write(int *err) {
+std::pair<int, int> TcpConnection::write() {
   size_t len = sender_.readable();
   int r_len = len;
   int n = -1;
+
   while (true) {
-    if (ssl_) {
-      n = ::SSL_write(ssl_, sender_.peek() + len - r_len, r_len);
-      if (n < 0) {
-        *err = ::SSL_get_error(ssl_, n);
-        return n;
-      }
-    } else {
-      n = ::write(connfd_, sender_.peek() + len - r_len, r_len);
-      if (n < 0) {
-        *err = errno;
-        return n;
-      }
-    }
+    n = channel_->write(sender_.peek() + len - r_len, r_len);
+    if (n < 0)
+      break;
+
     sender_.retired(n);
     r_len -= n;
     if (r_len <= 0) {
       n = 0;
-      sender_.retired_all();
+      sender_.retiredAll();
       break;
     }
   }
-  return n;
+  return std::make_pair(n, channel_->getError(n));
+}
+
+std::pair<int, bool> TcpConnection::readAgain() {
+  const auto [n, err] = read();
+  bool again = false;
+  if (channel_->type() == ChannelType::Raw)
+    again = (err == EAGAIN);
+  else if (channel_->type() == ChannelType::Ssl)
+    again = (err == SSL_ERROR_WANT_READ);
+  return std::make_pair(n, again);
+}
+
+std::pair<int, bool> TcpConnection::writeAgain() {
+  const auto [n, err] = write();
+  bool again = false;
+  if (channel_->type() == ChannelType::Raw)
+    again = (err == EAGAIN);
+  else if (channel_->type() == ChannelType::Ssl)
+    again = (err == SSL_ERROR_WANT_WRITE);
+  return std::make_pair(n, again);
 }

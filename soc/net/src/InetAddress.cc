@@ -1,5 +1,4 @@
 #include "../include/InetAddress.h"
-
 #include <arpa/inet.h>
 #include <string.h>
 #include <unistd.h>
@@ -18,10 +17,6 @@ InetAddress::InetAddress(const std::string &ip, uint16_t port) {
   sockin_.sin_port = ::htons(port);
   sockin_.sin_family = AF_INET;
   ::inet_pton(AF_INET, ip.data(), &sockin_.sin_addr);
-}
-
-std::string InetAddress::port_s() const noexcept {
-  return std::to_string(::ntohs(sockin_.sin_port));
 }
 
 std::string InetAddress::ip() const noexcept {
