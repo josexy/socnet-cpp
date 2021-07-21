@@ -82,8 +82,6 @@ private:
                      const std::string_view &,
                      HttpMap<std::string, std::string> &);
 
-  void attachSessionContext(HttpSession *session) { session_ = session; }
-
 private:
   net::Buffer *recver_;
   HttpSessionServer *owner_;
