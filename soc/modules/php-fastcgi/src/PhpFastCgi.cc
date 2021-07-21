@@ -215,7 +215,6 @@ std::pair<bool, std::string> PhpFastCgi::readPhpFpm(net::Buffer *buffer) {
       ret = ::read(sockfd_, content, contentLen);
       status = false;
       message = std::string(content, ret);
-
       //跳过填充部分
       if (responderHeader.paddingLength > 0) {
         ret = ::read(sockfd_, tmp, responderHeader.paddingLength);

@@ -8,13 +8,11 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-
-#include <string>
 #include <unordered_map>
 
 namespace soc {
 
-constexpr static const size_t kBufferSize = 1024;
+static constexpr const size_t kBufferSize = 2048;
 
 enum class FCGI_Params {
   REQUEST_METHOD,
