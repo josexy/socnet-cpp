@@ -7,7 +7,7 @@
 #include <time.h>
 namespace soc {
 
-constexpr static const size_t kMaxLineBuffer = 512;
+static constexpr const size_t kMaxLineBuffer = 512;
 
 class Logger {
 public:
@@ -33,7 +33,7 @@ public:
 
   template <int fc = F_None, int cc = C_None, int lv = LV_INFO, class... Args>
   void format(const char *fmt, int LINE, const char *FILE_NAME,
-              Args &&... args) {
+              Args &&...args) {
     int len = ::snprintf(nullptr, 0, fmt, args...);
     char buffer[kMaxLineBuffer]{0};
     ::snprintf(buffer, len + 1, fmt, args...);
