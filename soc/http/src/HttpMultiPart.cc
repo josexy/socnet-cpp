@@ -1,32 +1,32 @@
 #include "../include/HttpMultiPart.h"
 
-#include "../include/HttpUtil.h"
-#include <string.h>
-
 using namespace soc::http;
 
-auto HttpMultiPart::get(const std::string &name) const
+auto HttpMultiPart::value(const std::string &name) const
     -> std::optional<std::string> {
-  if (auto it = form_.find(name); it != form_.end())
-    return std::make_optional(it->second);
-  return std::nullopt;
+  return form_.get(name);
 }
 
-auto HttpMultiPart::file(const std::string &name) const
-    -> std::optional<const std::reference_wrapper<const std::vector<Part>>> {
-  if (auto it = files_.find(name); it != files_.end()) {
-    return std::optional<const std::reference_wrapper<const std::vector<Part>>>(
-        it->second);
+auto HttpMultiPart::file(const std::string &name, size_t index) const
+    -> HttpMultiPart::Part * {
+  Part *p = nullptr;
+  if (files_.contain(name)) {
+    if (index >= files_[name].size())
+      return p;
+    p = &files_[name].at(index);
   }
-  return std::nullopt;
+  return p;
 }
 
-void HttpMultiPart::parse(const std::string_view &body) {
+void HttpMultiPart::parse(std::string_view body) {
   size_t i = 0, bl = bd_.size(), len = body.size();
   std::string name, filename, type, form_file_data;
   bool file_mark = false;
   const char *boundary_s = bd_.data();
   State state = start_body;
+
+  static constexpr const size_t buf_size = 4096;
+  char buffer[buf_size];
 
   while (i < len) {
     switch (state) {
@@ -39,7 +39,7 @@ void HttpMultiPart::parse(const std::string_view &body) {
       break;
     }
     case start_boundary: {
-      if (strncmp(body.data() + i, boundary_s, bl) == 0) {
+      if (::strncmp(body.data() + i, boundary_s, bl) == 0) {
         i += bl;
         // --boundary\r\n
         if (i + 1 < len && body[i] == CR && body[i + 1] == LF) {
@@ -56,7 +56,7 @@ void HttpMultiPart::parse(const std::string_view &body) {
       break;
     }
     case end_boundary: {
-      if (hash_ext(body.data(), i, 19) == "Content-Disposition"_h) {
+      if (::strncmp(body.data() + i, "Content-Disposition", 19) == 0) {
         state = start_content_disposition;
         i += 19; // skip "Content-Disposition"
       } else {
@@ -101,7 +101,7 @@ void HttpMultiPart::parse(const std::string_view &body) {
         state = start_content_data;
       } else {
         // file type
-        if (hash_ext(body.data(), i, 12) == "Content-Type"_h) {
+        if (::strncmp(body.data() + i, "Content-Type", 12) == 0) {
           i += 14; // skip "Content-Type"
           file_mark = true;
           state = start_content_type;
@@ -132,14 +132,12 @@ void HttpMultiPart::parse(const std::string_view &body) {
       break;
     }
     case start_content_data: {
-      constexpr const static size_t buf_size = 4096;
       form_file_data.reserve(buf_size);
-      char buffer[buf_size];
       size_t k = 0, ix = 1, pi = i;
       while (i < len) {
         if (i + 4 < len && body[i] == CR && body[i + 1] == LF &&
             body[i + 2] == '-' && body[i + 3] == '-' &&
-            strncmp(body.data() + i + 4, boundary_s, bl) == 0) {
+            ::strncmp(body.data() + i + 4, boundary_s, bl) == 0) {
           if (k != 0)
             form_file_data.append(buffer, k);
           form_file_data.resize(i - pi);
@@ -158,15 +156,17 @@ void HttpMultiPart::parse(const std::string_view &body) {
       break;
     }
     case end_content_data: {
-      if (!file_mark) // form
-        form_.emplace(name, form_file_data);
-      else { // file
-        if (auto x = files_.find(name); x != files_.end()) {
-          x->second.emplace_back(std::move(name), std::move(filename),
+      if (!file_mark) {
+        // form
+        form_.add(name, form_file_data);
+      } else {
+        // file
+        if (auto x = files_.get(name); x.has_value()) {
+          x.value().emplace_back(std::move(name), std::move(filename),
                                  std::move(type), std::move(form_file_data));
         } else {
-          files_.emplace(name, std::move(std::vector{Part(name, filename, type,
-                                                          form_file_data)}));
+          files_.add(name, std::move(std::vector{
+                               Part(name, filename, type, form_file_data)}));
         }
       }
       name = filename = type = form_file_data = "";

@@ -2,21 +2,19 @@
 #define SOC_HTTP_HTTPREQUEST_H
 
 #include "HttpAuth.h"
-#include "HttpHeader.h"
+#include "HttpCookie.h"
 #include "HttpMultiPart.h"
-#include "HttpUtil.h"
-#include <variant>
+#include "HttpSession.h"
+#include "HttpSessionServer.h"
 
 namespace soc {
 namespace http {
 
-using HttpBasicLocalAuth = HttpBasicAuth<HttpLocalPassStore>;
-using HttpBasicSqlAuth = HttpBasicAuth<HttpSqlPassStore>;
-using HttpDigestLocalAuth = HttpDigestAuth<HttpLocalPassStore>;
-using HttpDigestSqlAuth = HttpDigestAuth<HttpSqlPassStore>;
-
 class HttpRequest {
 public:
+  friend class HttpService;
+  friend class HttpServer;
+
   enum RetCode {
     NO_REQUEST,
 
@@ -30,56 +28,65 @@ public:
     AGAIN_CONTENT
   };
 
-  explicit HttpRequest(net::Buffer *recver);
-  void initialize_parse();
+  explicit HttpRequest(net::Buffer *recver, HttpSessionServer *owner);
+  ~HttpRequest();
 
+  void initialize();
   void add(const std::string &key, const std::string &value);
-
   std::optional<std::string> get(const std::string &key) const;
   HttpMethod method() const noexcept { return method_; }
   HttpVersion version() const noexcept { return version_; }
-  HttpAuthType auth_type() const noexcept { return auth_type_; }
-  const HttpHeader &header() const noexcept { return header_; }
-  const std::string &query_s() const noexcept { return query_s_; }
-  const HttpMultiPart &multipart() const noexcept { return multipart_; }
+  const HttpMultiPart &multiPart() const noexcept { return multipart_; }
+  const std::string &queryStr() const noexcept { return query_s_; }
   const std::string &url() const noexcept { return url_; }
-  std::string full_url() const noexcept;
+  const std::string &phpMessage() const noexcept { return php_message_; }
+  std::string fullUrl() const noexcept;
 
-  bool has_query() const noexcept { return !query_.empty(); }
-  bool has_form() const noexcept { return !form_.empty(); }
-  bool close_conn() const noexcept { return close_; }
-  bool compressed() const noexcept { return compressed_; }
-  bool has_multipart() const noexcept { return has_multipart_; }
-  bool has_cookies() const noexcept { return has_cookies_; }
+  bool hasQueryString() const noexcept { return !query_.empty(); }
+  bool hasForm() const noexcept { return !form_.empty(); }
+  bool hasMultiPart() const noexcept { return has_multipart_; }
+  bool hasCookies() const noexcept { return has_cookies_; }
+  bool isKeepAlive() const noexcept { return keepalive_; }
+  bool isCompressed() const noexcept { return compressed_; }
 
-  decltype(auto) query() const noexcept { return query_; }
-  decltype(auto) form() const noexcept { return form_; }
-  decltype(auto) cookies() const noexcept { return cookies_; }
-  decltype(auto) post_data() const noexcept { return post_data_; }
-
-  template <class T> decltype(auto) auth() const {
-    return const_cast<T *>(std::get_if<T>(&auth_));
+  const HttpHeader &header() const noexcept { return header_; }
+  const HttpMap<std::string, std::string> &query() const noexcept {
+    return query_;
   }
+  const HttpMap<std::string, std::string> &form() const noexcept {
+    return form_;
+  }
+  const HttpCookie &cookies() const noexcept { return cookies_; }
+  const std::string &postData() const noexcept { return post_data_; }
+  const std::vector<std::string> &match() const noexcept { return match_; }
 
-  RetCode parse_request();
+  HttpAuth *auth() const noexcept { return auth_; }
+  HttpSession *session() const;
+
+  RetCode parseRequest();
 
 private:
   inline constexpr static char CR = '\r';
   inline constexpr static char LF = '\n';
 
-  RetCode parse_request_line();
-  RetCode parse_request_header();
-  RetCode parse_request_content();
+  RetCode parseRequestLine();
+  RetCode parseRequestHeader();
+  RetCode parseRequestContent();
 
-  void parse_url_query();
-  void parse_authorization();
+  void parseUrlQuery();
+  void parseCookie();
+  void parseMultiPartData();
+  void parseAuthorization();
 
-  void parse_key_value(std::string_view, const std::string_view &,
-                       const std::string_view &,
-                       std::unordered_map<std::string, std::string> &);
+  void parseKeyValue(std::string_view, const std::string_view &,
+                     const std::string_view &,
+                     HttpMap<std::string, std::string> &);
+
+  void attachSessionContext(HttpSession *session) { session_ = session; }
 
 private:
   net::Buffer *recver_;
+  HttpSessionServer *owner_;
 
   std::string req_url_;
   std::string url_;
@@ -89,21 +96,23 @@ private:
   HttpVersion version_;
   HttpHeader header_;
   HttpMultiPart multipart_;
-  HttpAuthType auth_type_;
   RetCode ret_code_;
+  HttpCookie cookies_;
 
-  bool close_;
+  bool keepalive_;
   bool compressed_;
   bool has_multipart_;
   bool has_cookies_;
 
-  std::variant<HttpBasicLocalAuth, HttpBasicSqlAuth, HttpDigestLocalAuth,
-               HttpDigestSqlAuth>
-      auth_;
-  std::unordered_map<std::string, std::string> query_;
-  std::unordered_map<std::string, std::string> form_;
-  std::unordered_map<std::string, std::string> cookies_;
-  std::unordered_map<std::string, std::string> da_;
+  HttpAuth *auth_;
+  mutable HttpSession *session_;
+
+  mutable std::vector<std::string> match_;
+  mutable std::string php_message_;
+
+  HttpMap<std::string, std::string> query_;
+  HttpMap<std::string, std::string> form_;
+  HttpMap<std::string, std::string> da_;
 };
 } // namespace http
 } // namespace soc

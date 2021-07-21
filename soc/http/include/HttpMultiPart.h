@@ -2,8 +2,7 @@
 #define SOC_HTTP_HTTPMULTIPART_H
 
 #include "HttpHeader.h"
-#include <functional>
-#include <unordered_map>
+#include "HttpUtil.h"
 
 namespace soc {
 namespace http {
@@ -14,21 +13,20 @@ public:
     std::string name;
     std::string file_name;
     std::string file_type;
-    std::string data_str;
+    std::string data;
 
     Part() {}
     Part(std::string name, std::string fn, std::string ft, std::string data)
         : name(std::move(name)), file_name(std::move(fn)),
-          file_type(std::move(ft)), data_str(std::move(data)) {}
+          file_type(std::move(ft)), data(std::move(data)) {}
   };
 
-  void set_boundary(const std::string &boundary) noexcept { bd_ = boundary; }
+  void setBoundary(const std::string &boundary) noexcept { bd_ = boundary; }
   const std::string &boundary() const noexcept { return bd_; }
-  std::optional<std::string> get(const std::string &name) const;
-  std::optional<const std::reference_wrapper<const std::vector<Part>>>
-  file(const std::string &name) const;
+  std::optional<std::string> value(const std::string &name) const;
+  Part *file(const std::string &name, size_t index = 0) const;
 
-  void parse(const std::string_view &body);
+  void parse(std::string_view body);
 
 private:
   enum State {
@@ -45,8 +43,8 @@ private:
   };
 
   std::string bd_;
-  std::unordered_map<std::string, std::string> form_;
-  std::unordered_map<std::string, std::vector<Part>> files_;
+  HttpMap<std::string, std::string> form_;
+  mutable HttpMap<std::string, std::vector<Part>> files_;
 
   inline constexpr static char CR = '\r';
   inline constexpr static char LF = '\n';

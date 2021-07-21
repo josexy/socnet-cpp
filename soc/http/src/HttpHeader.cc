@@ -2,7 +2,12 @@
 
 using namespace soc::http;
 
-HttpHeader::HttpHeader(std::string_view header) { parse(header); }
+HttpHeader::HttpHeader() {}
+
+HttpHeader::HttpHeader(std::string_view header) {
+  WriteLock locker(mutex_);
+  parse(header);
+}
 
 int HttpHeader::parse(std::string_view header) {
   std::string_view line_header;
@@ -23,7 +28,10 @@ int HttpHeader::parse(std::string_view header) {
       break;
 
     std::string_view key = line_header.substr(0, pos2);
-    std::string_view value = line_header.substr(pos2 + 2, pos - pos2 - 2);
+    while (line_header[pos2 + 1] == ' ')
+      pos2++;
+    pos2++;
+    std::string_view value = line_header.substr(pos2, pos - pos2);
     headers_.emplace(std::string(key.data(), key.size()),
                      std::string(value.data(), value.size()));
 
@@ -33,39 +41,61 @@ int HttpHeader::parse(std::string_view header) {
   return index;
 }
 
+void HttpHeader::add(const HttpHeader &header) {
+  WriteLock locker(mutex_);
+  headers_.insert(header.headers_.begin(), header.headers_.end());
+}
+
 void HttpHeader::add(const std::string &key, const std::string &value) {
-  if (!key.starts_with("Set-Cookie"))
+  WriteLock locker(mutex_);
+  if (!key.starts_with("Set-Cookie")) {
     if (auto x = headers_.find(key); x != headers_.end()) {
       headers_.lower_bound(key)->second = value;
       return;
     }
+  }
   headers_.emplace(std::forward<const std::string &>(key),
                    std::forward<const std::string &>(value));
 }
 
 void HttpHeader::remove(const std::string &key) {
+  WriteLock locker(mutex_);
   if (headers_.find(key) != headers_.end()) {
     headers_.erase(key);
   }
 }
 
 std::optional<std::string> HttpHeader::get(const std::string &key) const {
+  ReadLock locker(mutex_);
   if (auto it = headers_.find(key); it != headers_.end())
     return std::make_optional(it->second);
   return std::nullopt;
 }
 
-std::string HttpHeader::to_string() const {
+bool HttpHeader::contain(const std::string &key) const noexcept {
+  ReadLock locker(mutex_);
+  return headers_.find(key) != headers_.end();
+}
+
+std::string HttpHeader::toString() const {
+  ReadLock locker(mutex_);
   std::string str;
-  for (auto &[key, value] : headers_)
+  for (const auto &[key, value] : headers_)
     str += key + ": " + value + "\r\n";
   return str;
 }
 
+void HttpHeader::forEach(const Callback &callback) const {
+  ReadLock locker(mutex_);
+  for (const auto &[key, value] : headers_)
+    callback(key, value);
+}
+
 void HttpHeader::store(soc::net::Buffer *sender) {
+  ReadLock locker(mutex_);
   if (!sender)
     return;
-  for (auto &[key, value] : headers_) {
+  for (const auto &[key, value] : headers_) {
     std::string v = key + ": " + value + "\r\n";
     sender->append(v.data(), v.size());
   }

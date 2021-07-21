@@ -1,15 +1,21 @@
-
 #include "../include/HttpRequest.h"
-
 using namespace soc::http;
 
-HttpRequest::HttpRequest(net::Buffer *recver)
-    : recver_(recver), close_(true), compressed_(false), has_multipart_(false),
-      has_cookies_(false) {
-  initialize_parse();
+HttpRequest::HttpRequest(net::Buffer *recver, HttpSessionServer *owner)
+    : recver_(recver), owner_(owner), keepalive_(false), compressed_(false),
+      has_multipart_(false), has_cookies_(false), auth_(nullptr),
+      session_(nullptr) {
+  initialize();
 }
 
-void HttpRequest::initialize_parse() { ret_code_ = NO_REQUEST; }
+HttpRequest::~HttpRequest() {
+  if (auth_)
+    delete auth_;
+  auth_ = nullptr;
+  session_ = nullptr;
+}
+
+void HttpRequest::initialize() { ret_code_ = NO_REQUEST; }
 
 void HttpRequest::add(const std::string &key, const std::string &value) {
   header_.add(key, value);
@@ -19,7 +25,7 @@ std::optional<std::string> HttpRequest::get(const std::string &key) const {
   return header_.get(key);
 }
 
-std::string HttpRequest::full_url() const noexcept {
+std::string HttpRequest::fullUrl() const noexcept {
   std::string schema =
       GET_CONFIG(bool, "server", "enable_https") ? "https" : "http";
   std::string host;
@@ -30,33 +36,38 @@ std::string HttpRequest::full_url() const noexcept {
   }
   return schema + ":" + "//" + host + ":" +
          std::to_string(GET_CONFIG(int, "server", "listen_port")) +
-         EncodeUtil::url_decode(req_url_.c_str(), req_url_.size());
+         EncodeUtil::urlDecode(req_url_.c_str(), req_url_.size());
 }
 
-HttpRequest::RetCode HttpRequest::parse_request() {
+HttpSession *HttpRequest::session() const {
+  session_ = owner_->associateSession(const_cast<HttpRequest *>(this));
+  return session_;
+}
+
+HttpRequest::RetCode HttpRequest::parseRequest() {
   while (true) {
     switch (ret_code_) {
     case NO_REQUEST: {
-      parse_request_line();
+      parseRequestLine();
       break;
     }
     case REQUEST_LINE_DONE:
     case AGAIN_HEADER: {
-      auto code = parse_request_header();
+      auto code = parseRequestHeader();
       if (code == AGAIN_HEADER)
         return code;
       break;
     }
     case REQUEST_HEADER_DONE: {
-      parse_url_query();
+      parseUrlQuery();
 
-      if (header_.count() == 0 && version_ != HttpVersion::HTTP_1_0) {
-        close_ = false;
+      if (header_.empty() && version_ != HttpVersion::HTTP_1_0) {
+        keepalive_ = true;
         return REQUEST_CONTENT_DONE;
       }
 
       if (version_ != HttpVersion::HTTP_1_0)
-        close_ = false;
+        keepalive_ = true;
 
       if (auto conn = header_.get("Connection"); conn.has_value()) {
         // Before HTTP/1.0, the Connection field in Request or Response need
@@ -64,24 +75,27 @@ HttpRequest::RetCode HttpRequest::parse_request() {
         // response header Connection field
         std::string_view v = conn.value();
         if (version_ == HttpVersion::HTTP_1_0 && v.starts_with("keep-alive"))
-          close_ = false;
+          keepalive_ = true;
         else if (v.starts_with("close"))
-          close_ = true;
+          keepalive_ = false;
       }
 
       if (auto enc = header_.get("Accept-Encoding"); enc.has_value()) {
         compressed_ = std::string_view(enc.value()).find("gzip") !=
                       std::string_view::npos;
       }
-      parse_authorization();
 
-      auto code = parse_request_content();
+      parseCookie();
+      parseMultiPartData();
+      parseAuthorization();
+
+      auto code = parseRequestContent();
       if (code == AGAIN_CONTENT)
         return code;
       break;
     }
     case AGAIN_CONTENT: {
-      auto code = parse_request_content();
+      auto code = parseRequestContent();
       if (code == AGAIN_CONTENT)
         return code;
       break;
@@ -93,7 +107,7 @@ HttpRequest::RetCode HttpRequest::parse_request() {
   }
 }
 
-HttpRequest::RetCode HttpRequest::parse_request_line() {
+HttpRequest::RetCode HttpRequest::parseRequestLine() {
   size_t i = 0;
   std::string_view line(recver_->peek(), recver_->readable());
 
@@ -132,7 +146,7 @@ HttpRequest::RetCode HttpRequest::parse_request_line() {
   return ret_code_ = REQUEST_LINE_DONE;
 }
 
-HttpRequest::RetCode HttpRequest::parse_request_header() {
+HttpRequest::RetCode HttpRequest::parseRequestHeader() {
   std::string_view header(recver_->peek(), recver_->readable());
   std::string_view line_header;
   while (true) {
@@ -156,25 +170,13 @@ HttpRequest::RetCode HttpRequest::parse_request_header() {
     header_.add(std::string(key.data(), key.size()),
                 std::string(value.data(), value.size()));
 
-    if (!has_multipart_ && key == "Content-Type" &&
-        value.starts_with("multipart/form-data")) {
-      has_multipart_ = true;
-      value.remove_prefix(21);
-      if (value.starts_with("boundary")) {
-        value.remove_prefix(9);
-        multipart_.set_boundary(std::string(value.data(), value.size()));
-      }
-    } else if (!has_cookies_ && key == "Cookie") {
-      has_cookies_ = true;
-      parse_key_value(value, "=", "; ", cookies_);
-    }
     header.remove_prefix(pos + 2);
     recver_->retired(pos + 2);
   }
   return ret_code_ = AGAIN_HEADER;
 }
 
-HttpRequest::RetCode HttpRequest::parse_request_content() {
+HttpRequest::RetCode HttpRequest::parseRequestContent() {
   std::string_view content(recver_->peek(), recver_->readable());
   post_data_.append(content.data(), content.size());
   // Content-Type
@@ -186,47 +188,60 @@ HttpRequest::RetCode HttpRequest::parse_request_content() {
       return ret_code_ = AGAIN_CONTENT;
     multipart_.parse(content);
   } else {
-    parse_key_value(content, "=", "&", form_);
+    parseKeyValue(content, "=", "&", form_);
   }
-  recver_->retired_all();
+  recver_->retiredAll();
   return ret_code_ = REQUEST_CONTENT_DONE;
 }
 
-void HttpRequest::parse_url_query() {
+void HttpRequest::parseUrlQuery() {
   std::string_view uls(req_url_.data(), req_url_.size());
   size_t pos = uls.find_first_of("?");
   if (pos != uls.npos) {
     query_s_ = uls.substr(pos + 1);
     uls.remove_prefix(pos + 1);
-    parse_key_value(uls, "=", "&", query_);
+    parseKeyValue(uls, "=", "&", query_);
   }
-  url_ = EncodeUtil::url_decode(req_url_.substr(0, pos));
+  url_ = EncodeUtil::urlDecode(req_url_.substr(0, pos));
 }
 
-void HttpRequest::parse_authorization() {
+void HttpRequest::parseCookie() {
+  if (auto it = header_.get("Cookie"); it.has_value()) {
+    has_cookies_ = true;
+    parseKeyValue(it.value(), "=", ";", cookies_);
+  }
+}
+
+void HttpRequest::parseMultiPartData() {
+  if (auto it = header_.get("Content-Type"); it.has_value()) {
+    std::string_view value = it.value();
+    if (value.starts_with("multipart/form-data")) {
+      has_multipart_ = true;
+      value.remove_prefix(21);
+      if (value.starts_with("boundary")) {
+        value.remove_prefix(9);
+        multipart_.setBoundary(std::string(value.data(), value.size()));
+      }
+    }
+  }
+}
+
+void HttpRequest::parseAuthorization() {
   if (auto x = header_.get("Authorization"); x.has_value()) {
     std::string_view auth = x.value();
     if (auth.starts_with("Basic")) {
-      auth_type_ = HttpAuthType::Basic;
       auth.remove_prefix(6);
 
-      std::string user_pass = EncodeUtil::base64_decode(auth);
+      std::string user_pass = EncodeUtil::base64Decode(auth);
       std::string_view user_pass_sv(user_pass.data(), user_pass.size());
 
       size_t pos = user_pass.find_first_of(":");
       std::string_view user = user_pass_sv.substr(0, pos);
       std::string_view pass = user_pass_sv.substr(pos + 1);
 
-      if (GET_CONFIG(bool, "server", "enable_mysql")) {
-        auth_ = HttpBasicSqlAuth();
-        std::get<HttpBasicSqlAuth>(auth_).verify_user_private(user, pass);
-      } else {
-        auth_ = HttpBasicLocalAuth();
-        std::get<HttpBasicLocalAuth>(auth_).verify_user_private(user, pass);
-      }
+      auth_ = new HttpBasicAuth(user, pass);
 
     } else if (auth.starts_with("Digest")) {
-      auth_type_ = HttpAuthType::Digest;
       auth.remove_prefix(7);
 
       int state = 0;
@@ -259,7 +274,7 @@ void HttpRequest::parse_authorization() {
             }
             buffer[v++] = auth[i++];
           }
-          da_.emplace(std::string(buffer, k), std::string(buffer + k, v - k));
+          da_.add(std::string(buffer, k), std::string(buffer + k, v - k));
           k = v = 0;
           state = 2;
           break;
@@ -279,58 +294,38 @@ void HttpRequest::parse_authorization() {
         }
       }
 
-      std::string_view method;
+      std::string method;
       if (method_ == HttpMethod::GET)
         method = "GET";
       else if (method_ == HttpMethod::POST)
         method = "POST";
       else if (method_ == HttpMethod::HEAD)
         method = "HEAD";
-
-      if (GET_CONFIG(bool, "server", "enable_mysql")) {
-        auth_ = HttpDigestSqlAuth();
-        std::get<HttpDigestSqlAuth>(auth_).digest_info_ = x.value();
-        std::get<HttpDigestSqlAuth>(auth_).verify_user_private(
-            da_.count("username") ? da_["username"] : "", method,
-            da_.count("uri") ? da_["uri"] : "",
-            da_.count("nonce") ? da_["nonce"] : "",
-            da_.count("nc") ? da_["nc"] : "",
-            da_.count("cnonce") ? da_["cnonce"] : "",
-            da_.count("qop") ? da_["qop"] : "",
-            da_.count("response") ? da_["response"] : "");
-      } else {
-        auth_ = HttpDigestLocalAuth();
-        std::get<HttpDigestLocalAuth>(auth_).digest_info_ = x.value();
-        std::get<HttpDigestLocalAuth>(auth_).verify_user_private(
-            da_.count("username") ? da_["username"] : "", method,
-            da_.count("uri") ? da_["uri"] : "",
-            da_.count("nonce") ? da_["nonce"] : "",
-            da_.count("nc") ? da_["nc"] : "",
-            da_.count("cnonce") ? da_["cnonce"] : "",
-            da_.count("qop") ? da_["qop"] : "",
-            da_.count("response") ? da_["response"] : "");
-      }
-
-    } else {
-      // other authorization...
+      da_.add("method", method);
+      auth_ = new HttpDigestAuth(x.value(), da_);
     }
+  } else {
+    // other authorization...
   }
 }
 
-void HttpRequest::parse_key_value(
-    std::string_view s, const std::string_view &s1, const std::string_view &s2,
-    std::unordered_map<std::string, std::string> &c) {
+void HttpRequest::parseKeyValue(std::string_view s, const std::string_view &s1,
+                                const std::string_view &s2,
+                                HttpMap<std::string, std::string> &c) {
   while (!s.empty()) {
     size_t pos = s.find(s2);
     std::string_view kv = s.substr(0, pos);
     size_t pos2 = kv.find(s1);
-    c.emplace(EncodeUtil::url_decode(std::string(kv.substr(0, pos2))),
-              EncodeUtil::url_decode(std::string(
-                  kv.substr(pos2 + s1.size(), pos - pos2 - s1.size()))));
+    c.add(EncodeUtil::urlDecode(std::string(kv.substr(0, pos2))),
+          EncodeUtil::urlDecode(std::string(
+              kv.substr(pos2 + s1.size(), pos - pos2 - s1.size()))));
     if (pos == s.npos)
       pos = s.size();
-    else
+    else {
+      while (kv[pos + 1] == ' ')
+        pos++;
       pos += s2.size();
+    }
     s.remove_prefix(pos);
   }
 }
