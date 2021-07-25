@@ -85,4 +85,4 @@ int main() {
 }
 ```
 
-PS: 可能需要配置php支持mysql，除此之外，也可能需要修改php-fpm配置文件中 `user` 和 `group` 为当前用户名。
+PS: 可能需要修改php-fpm配置文件中 `user` 和 `group` 为当前用户名。
