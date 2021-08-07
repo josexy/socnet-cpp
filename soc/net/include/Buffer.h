@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <string>
+#include <sys/mman.h>
 #include <sys/uio.h>
 #include <vector>
 
@@ -12,17 +13,34 @@ namespace net {
 class Buffer {
 public:
   explicit Buffer(size_t init_size = 4096)
-      : buffer_(init_size), rindex_(0), windex_(0) {}
+      : buffer_(init_size), rindex_(0), windex_(0), mapping_addr_(nullptr),
+        mapping_size_(0), switch_mapping_(false) {}
+
+  ~Buffer() { reset(); }
+
+  void reset() {
+    rindex_ = windex_ = 0;
+    if (mapping_addr_)
+      ::munmap(mapping_addr_, mapping_size_);
+    mapping_addr_ = nullptr;
+    mapping_size_ = 0;
+    switch_mapping_ = false;
+  }
 
   size_t readable() const noexcept { return windex_ - rindex_; }
   size_t writable() const noexcept { return buffer_.size() - windex_; }
+  size_t mappingSize() const noexcept { return mapping_size_; }
 
-  const char *begin() const noexcept { return &*buffer_.begin(); }
-  char *begin() noexcept { return &*buffer_.begin(); }
-  char *begin_write() noexcept { return &*buffer_.begin() + windex_; }
-  const char *peek() const noexcept { return begin() + rindex_; }
+  char *begin() noexcept { return buffer_.data(); }
+  const char *peek() noexcept { return beginRead(); }
+  char *beginRead() noexcept { return begin() + rindex_; }
+  char *beginWrite() noexcept { return begin() + windex_; }
+  char *mappingAddr() noexcept { return mapping_addr_; }
 
-  void retiredAll() { rindex_ = windex_ = 0; }
+  bool isSwitchMapping() const noexcept { return switch_mapping_; }
+  void switchMapping(bool is) noexcept { switch_mapping_ = is; }
+
+  void retiredAll() noexcept { rindex_ = windex_ = 0; }
   void retired(size_t len) noexcept {
     if (len < readable())
       rindex_ += len;
@@ -37,7 +55,7 @@ public:
     if (len <= 0)
       return;
     ensureWritable(len);
-    std::copy(begin, end, buffer_.data() + windex_);
+    std::copy(begin, end, beginWrite());
     hasWritten(len);
   }
 
@@ -45,11 +63,20 @@ public:
     if (len <= 0)
       return;
     ensureWritable(len);
-    std::copy(data, data + len, buffer_.data() + windex_);
+    std::copy(data, data + len, beginWrite());
     hasWritten(len);
   }
 
   void append(std::string_view data) { append(data.data(), data.size()); }
+
+  void appendMapping(std::string_view mapping) {
+    appendMapping(const_cast<char *>(mapping.data()), mapping.size());
+  }
+
+  void appendMapping(char *mapping, size_t len) {
+    mapping_addr_ = mapping;
+    mapping_size_ = len;
+  }
 
   void ensureWritable(size_t len) {
     if (writable() < len)
@@ -58,6 +85,7 @@ public:
 
   void hasWritten(size_t len) { windex_ += len; }
 
+  // Not used
   int readFd(int fd, int *err) {
     char buff[65535];
     struct iovec iov[2];
@@ -86,16 +114,19 @@ private:
       buffer_.resize(windex_ + len + 1);
     } else {
       size_t rlen = readable();
-      std::copy(begin() + rindex_, begin() + windex_, begin());
+      std::copy(beginRead(), beginWrite(), begin());
       rindex_ = 0;
       windex_ = rindex_ + rlen;
     }
   }
 
-private:
   std::vector<char> buffer_;
   size_t rindex_;
   size_t windex_;
+
+  char *mapping_addr_;
+  size_t mapping_size_;
+  bool switch_mapping_;
 };
 } // namespace net
 } // namespace soc

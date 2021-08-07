@@ -17,7 +17,7 @@ public:
   bool isOpen() const { return fp_ != nullptr; }
 
   bool readLine(std::string &line);
-  void readAll(net::Buffer *buffer);
+  std::string_view readAll(net::Buffer *buffer);
 
   static bool exist(std::string_view file);
 
