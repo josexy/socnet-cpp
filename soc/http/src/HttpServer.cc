@@ -351,7 +351,7 @@ bool HttpServer::dispatchPhpProcessor(const std::string &path,
 }
 
 std::string HttpServer::mappingMimeType(const std::string_view &url) {
-  size_t i = url.find_first_of(".");
+  size_t i = url.find_last_of(".");
 
   std::string type;
   if (i == std::string_view::npos) {
