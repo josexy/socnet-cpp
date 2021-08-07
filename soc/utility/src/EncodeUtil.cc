@@ -9,18 +9,16 @@
 
 using namespace soc;
 
-void EncodeUtil::gzipCompress(net::Buffer *tmp, net::Buffer *buf,
-                              const std::function<void(size_t)> &f,
-                              const std::function<void()> &g) {
-  std::vector<uint8_t> output;
-  size_t size = tmp->readable();
+void EncodeUtil::gzipCompress(std::string_view buf,
+                              std::vector<uint8_t> &output) {
+  size_t size = buf.size();
   z_stream strm;
   ::memset(&strm, 0, sizeof(strm));
 
   deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 31, 8,
                Z_DEFAULT_STRATEGY);
 
-  strm.next_in = reinterpret_cast<z_const Bytef *>((void *)tmp->peek());
+  strm.next_in = reinterpret_cast<z_const Bytef *>((void *)buf.data());
   strm.avail_in = static_cast<uint32_t>(size);
 
   std::size_t size_compressed = 0;
@@ -39,10 +37,6 @@ void EncodeUtil::gzipCompress(net::Buffer *tmp, net::Buffer *buf,
 
   ::deflateEnd(&strm);
   output.resize(size_compressed);
-
-  f(output.size());
-  g();
-  buf->append<uint8_t>(output.begin(), output.end());
 }
 
 unsigned char *EncodeUtil::md5Hash(void *data, size_t n, unsigned char md[16]) {

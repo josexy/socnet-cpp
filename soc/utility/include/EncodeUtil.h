@@ -2,7 +2,6 @@
 #define SOC_UTILITY_ENCODEUTIL_H
 
 #include "../../modules/base64/include/Base64.h"
-#include "../../net/include/Buffer.h"
 #include <functional>
 
 namespace soc {
@@ -12,9 +11,7 @@ class Buffer;
 
 struct EncodeUtil {
   // Gzip compress algorithm for http response body
-  static void gzipCompress(net::Buffer *, net::Buffer *,
-                           const std::function<void(size_t)> &,
-                           const std::function<void()> &);
+  static void gzipCompress(std::string_view, std::vector<uint8_t> &);
 
   // MD5
   static unsigned char *md5Hash(void *, size_t, unsigned char[16]);
