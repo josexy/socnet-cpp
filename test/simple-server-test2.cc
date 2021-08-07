@@ -125,7 +125,7 @@ void handlerSignal(int) { server.quit(); }
 int main() {
   ::signal(SIGINT, handlerSignal);
 
-  server.addMountDir("/", ".");
+  server.addMountDir("/", "./html/");
 
   server.addService<SetSessionService>("/set");
   server.addService<GetSessionService>("/get");
@@ -133,7 +133,7 @@ int main() {
   server.addService<LoginTestService>("/login");
   server.addService<PostTestService>("/post");
 
-  server.addUrlPatternService<PostTestService>("/regex/(.*?)$");
+  // server.addUrlPatternService<PostTestService>("/regex/(.*?)$");
 
   server.setErrorService<ErrorService>();
   server.start();
