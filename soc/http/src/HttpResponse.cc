@@ -59,6 +59,21 @@ void HttpResponseBuilder::prepareHeader() {
   sender_->append("\r\n", 2);
 }
 
+void HttpResponseBuilder::makeHeaderPart(size_t content_length) {
+  if (version_ == HttpVersion::HTTP_1_0) {
+    if (keepalive_) {
+      header_.add("Connection", "keep-alive");
+    } else {
+      header_.add("Connection", "close");
+    }
+  } else if (!keepalive_) {
+    header_.add("Connection", "close");
+  }
+  if (keepalive_) {
+    header_.add("Content-Length", std::to_string(content_length));
+  }
+}
+
 void HttpResponseBuilder::build() {
   // Only compresses responses for the following mime types:
   // text/*
@@ -77,33 +92,29 @@ void HttpResponseBuilder::build() {
     compressed_ = false;
   }
 
-  auto func_connection = [this](size_t content_length) {
-    if (version_ == HttpVersion::HTTP_1_0) {
-      if (keepalive_) {
-        header_.add("Connection", "keep-alive");
-      } else {
-        header_.add("Connection", "close");
-      }
-    } else if (!keepalive_) {
-      header_.add("Connection", "close");
-    }
-    if (keepalive_) {
-      header_.add("Content-Length", std::to_string(content_length));
-    }
-  };
-  if (resp_file_) {
-    FileUtil(file_name_).readAll(&tmp_buffer_);
-  }
+  std::string_view sv;
+  if (resp_file_)
+    sv = FileUtil(file_name_).readAll(&tmp_buffer_);
+  else
+    sv = std::string_view(tmp_buffer_.peek(), tmp_buffer_.readable());
+
+  std::vector<uint8_t> out;
   if (compressed_) {
     header_.add("Content-Encoding", "gzip");
-    EncodeUtil::gzipCompress(
-        &tmp_buffer_, sender_, func_connection,
-        std::bind(&HttpResponseBuilder::prepareHeader, this));
+    EncodeUtil::gzipCompress(sv, out);
+    makeHeaderPart(out.size());
+  } else
+    makeHeaderPart(sv.size());
 
+  prepareHeader();
+  if (compressed_) {
+    sender_->append<uint8_t>(out.begin(), out.end());
   } else {
-    func_connection(tmp_buffer_.readable());
-    prepareHeader();
-    sender_->append(tmp_buffer_.peek(), tmp_buffer_.readable());
+    if (tmp_buffer_.mappingAddr()) {
+      sender_->appendMapping(sv);
+      tmp_buffer_.appendMapping(nullptr, 0);
+    } else
+      sender_->append(sv);
   }
 }
 

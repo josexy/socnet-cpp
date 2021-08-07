@@ -51,18 +51,20 @@ public:
   }
 
   HttpResponseBuilder &body(const std::string_view &body) {
-    tmp_buffer_.retiredAll();
+    tmp_buffer_.reset();
     appendBody(body);
     return *this;
   }
 
   HttpResponseBuilder &renderFile(const std::string_view &filename) {
+    tmp_buffer_.reset();
     file_name_ = filename;
     resp_file_ = true;
     return *this;
   }
 
   HttpResponseBuilder &renderHtml(const std::string_view &filename) {
+    tmp_buffer_.reset();
     file_name_ = filename;
     resp_file_ = true;
     header_.add("Content-Type", "text/html; charset=utf-8");
@@ -88,7 +90,7 @@ public:
   int code() const noexcept { return code_; }
   bool keepAlive() const noexcept { return keepalive_; }
   const HttpHeader &header() const noexcept { return header_; }
-  std::string_view body() const noexcept {
+  std::string_view body() noexcept {
     return std::string_view(tmp_buffer_.peek(), tmp_buffer_.readable());
   }
 
@@ -96,6 +98,7 @@ public:
 
 private:
   void prepareHeader();
+  void makeHeaderPart(size_t);
 
 private:
   std::string uri_;
