@@ -7,8 +7,8 @@ TcpConnection::TcpConnection()
       channel_(nullptr) {}
 
 void TcpConnection::initialize(int connfd) {
-  sender_.retiredAll();
-  recver_.retiredAll();
+  sender_.reset();
+  recver_.reset();
 
   connfd_ = connfd;
   disconnected_ = keep_alive_ = false;
@@ -27,12 +27,14 @@ std::pair<int, int> TcpConnection::read() {
 }
 
 std::pair<int, int> TcpConnection::write() {
-  size_t len = sender_.readable();
+  bool switch_mapping = sender_.isSwitchMapping();
+  int len = sender_.readable();
   int r_len = len;
   int n = -1;
+  char *start = switch_mapping ? sender_.mappingAddr() : sender_.begin();
 
   while (true) {
-    n = channel_->write(sender_.peek() + len - r_len, r_len);
+    n = channel_->write(start + len - r_len, r_len);
     if (n < 0)
       break;
 
@@ -40,8 +42,17 @@ std::pair<int, int> TcpConnection::write() {
     r_len -= n;
     if (r_len <= 0) {
       n = 0;
-      sender_.retiredAll();
-      break;
+      if (!switch_mapping && sender_.mappingAddr()) {
+        switch_mapping = true;
+        sender_.switchMapping(switch_mapping);
+        start = sender_.mappingAddr();
+        len = r_len = sender_.mappingSize();
+        sender_.hasWritten(len);
+      } else {
+        // All data transmission completed
+        sender_.reset();
+        break;
+      }
     }
   }
   return std::make_pair(n, channel_->getError(n));
