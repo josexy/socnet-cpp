@@ -173,15 +173,15 @@ void TcpServer::handleConnectionClose(TcpConnection *conn) {
   if (conn->disconnected() || conn->channel() == nullptr)
     return;
 
-  poller_->removeEvent(conn->fd());
   conn->setDisconnected(true);
-
-  // free channel
-  if (conn->channel())
-    conn->setChannel(nullptr);
 
   if (closed_cb_)
     closed_cb_(conn);
+
+  poller_->removeEvent(conn->fd());
+  // free channel
+  if (conn->channel())
+    conn->setChannel(nullptr);
 }
 
 void TcpServer::onWrite(TcpConnection *conn) {
