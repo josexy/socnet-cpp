@@ -31,11 +31,15 @@ public:
   size_t writable() const noexcept { return buffer_.size() - windex_; }
   size_t mappingSize() const noexcept { return mapping_size_; }
 
-  char *begin() noexcept { return buffer_.data(); }
   const char *peek() noexcept { return beginRead(); }
-  char *beginRead() noexcept { return begin() + rindex_; }
   char *beginWrite() noexcept { return begin() + windex_; }
   char *mappingAddr() noexcept { return mapping_addr_; }
+  char *beginRead() noexcept {
+    if (switch_mapping_ && mapping_addr_)
+      return mapping_addr_ + rindex_;
+    else
+      return begin() + rindex_;
+  }
 
   bool isSwitchMapping() const noexcept { return switch_mapping_; }
   void switchMapping(bool is) noexcept { switch_mapping_ = is; }
@@ -109,6 +113,8 @@ public:
   }
 
 private:
+  char *begin() noexcept { return buffer_.data(); }
+
   void makeSpace(size_t len) {
     if (rindex_ + writable() < len) {
       buffer_.resize(windex_ + len + 1);
