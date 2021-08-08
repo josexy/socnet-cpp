@@ -45,7 +45,7 @@ std::string_view FileUtil::readAll(net::Buffer *buffer) {
   struct stat st;
   ::fstat(fd, &st);
 
-  constexpr static size_t M = 4 * 1024 * 1024;
+  constexpr static size_t M = 2 * 1024 * 1024;
 
   char *svbuf = nullptr;
   if (st.st_size <= M) {
