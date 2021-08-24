@@ -6,10 +6,14 @@
         "server_hostname": "localhost",
         "enable_https": false,
         "enable_php": true,
+        "enable_sendfile": false,
         "default_page": [
             "index.php",
             "index.html"
-        ]
+        ],
+        "user_pass_file": "./pass_store/user_password",
+        "authenticate_realm": "socnet@test",
+        "session_lifetime": 10
     },
     "https": {
         "cert_file": "./ssl/cert.crt",
@@ -17,6 +21,7 @@
         "password": ""
     },
     "php-fpm": {
+        "tcp_or_domain": true,
         "server_ip": "127.0.0.1",
         "server_port": 9000,
         "sock_path": "/run/php-fpm/php-fpm.sock"
