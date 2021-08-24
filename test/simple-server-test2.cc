@@ -6,19 +6,17 @@ using namespace soc::http;
 class LoginTestService : public HttpService {
 public:
   void doGet(const HttpRequest &req, HttpResponse &resp) override {
-    req.header().forEach([](auto k, auto v) { cout << k << ":" << v << '\n'; });
+    if (req.getAuth() && req.getAuth()->verify()) {
+      HttpCookie cookie;
+      cookie.add("id", "login");
+      cookie.setMaxAge(10);
+      cookie.setPath("/");
 
-    HttpCookie cookie;
-    cookie.add("id", "login");
-    cookie.setMaxAge(10);
-    cookie.setPath("/");
-
-    if (req.auth() && req.auth()->verify()) {
-      resp.cookie(cookie).body("login successfully!");
-    } else {
+      resp.setCookie(cookie)
+          .setContentType("text/plain")
+          .setBody("login successfully!");
+    } else
       resp.sendAuth(HttpAuthType::Basic);
-      return;
-    }
   }
 
   void doPost(const HttpRequest &req, HttpResponse &resp) override {
@@ -29,92 +27,114 @@ public:
 class PostTestService : public HttpService {
 public:
   void doGet(const HttpRequest &req, HttpResponse &resp) override {
-    HttpSession *session = req.session();
-    if (req.cookies().get("user").has_value()) {
-      resp.body("post test successfully!");
+    HttpSession *session = req.getSession();
+    if (req.getCookies().get("user").has_value()) {
+      resp.setContentType("text/plain").setBody("post test successfully!");
     } else {
-      resp.bodyHtml("html/post.html");
+      resp.setBodyHtml("html/post.html");
     }
   }
 
   void doPost(const HttpRequest &req, HttpResponse &resp) override {
     // Content-Type: multipart/form-data
     if (req.hasMultiPart()) {
-      auto &multipart = req.multiPart();
+      auto &multipart = req.getMultiPart();
 
-      std::cout << "boundary: " << multipart.boundary() << '\n';
-      if (auto x = multipart.value("address"); x.has_value())
+      std::cout << "boundary: " << multipart.getBoundary() << '\n';
+      if (auto x = multipart.getValue("address"); x.has_value())
         cout << x.value() << '\n';
 
-      if (auto x = multipart.value("phone"); x.has_value())
+      if (auto x = multipart.getValue("phone"); x.has_value())
         cout << x.value() << '\n';
 
-      if (auto file1 = multipart.file("file1"); file1 != nullptr) {
+      if (auto file1 = multipart.getFile("file1"); file1 != nullptr) {
         cout << "file1: " << file1->name << '\t' << file1->file_type << '\t'
              << file1->file_name << '\n';
       }
 
-      if (auto file2 = multipart.file("file2"); file2 != nullptr) {
+      if (auto file2 = multipart.getFile("file2"); file2 != nullptr) {
         cout << "file2: " << file2->name << '\t' << file2->file_type << '\t'
              << file2->file_name << '\n';
       }
 
-      resp.body("post test successfully!");
+      resp.setContentType("text/plain").setBody("post test successfully!");
       return;
     }
 
     // Content-Type: application/x-www-form-urlencoded
     if (req.hasForm()) {
-      std::string name = req.form().get("name").value();
+      std::string name = req.getForm().get("name").value();
+      std::string age = req.getForm().get("age").value();
+      cout << "name: " << name << '\n' << "age: " << age << '\n';
       if (name == "admin") {
         HttpCookie cookie;
         cookie.setMaxAge(5);
         cookie.add("user", name);
-        resp.cookie(cookie).body("post test successfully!");
+        resp.setCookie(cookie)
+            .setContentType("text/plain")
+            .setBody("post test successfully!");
         return;
       }
     }
-    resp.bodyHtml("html/post.html");
+    resp.setBodyHtml("html/post.html");
   }
 };
 
 class ErrorService : public HttpErrorService {
 public:
-  void doError(int code, const HttpRequest &req, HttpResponse &resp) override {
+  bool doError(int code, const HttpRequest &req, HttpResponse &resp) override {
     if (code == 404) {
-      resp.bodyHtml("html/error/404.html");
+      resp.setBodyHtml("html/error/404.html");
+      return true;
     } else if (code == 500) {
-      resp.bodyHtml("html/error/500.html");
+      resp.setBodyHtml("html/error/500.html");
+      return true;
     }
+    return false;
   }
 };
 
 class SetSessionService : public HttpService {
 public:
   void doGet(const HttpRequest &req, HttpResponse &resp) {
-    HttpSession *session = req.session();
-    cout << "session id: " << session->id() << endl;
+    HttpSession *session = req.getSession();
+    cout << "session id: " << session->getId() << endl;
     session->setValue("str", std::string("hello world"));
     session->setValue("num", 1000);
 
     // session->invalidate();
-    resp.body("set session");
+    resp.setContentType("text/plain").setBody("set session");
   }
 };
 
 class GetSessionService : public HttpService {
 public:
   void doGet(const HttpRequest &req, HttpResponse &resp) {
-    HttpSession *session = req.session();
-    cout << "session id: " << session->id() << endl;
+    HttpSession *session = req.getSession();
+    cout << "session id: " << session->getId() << endl;
     if (auto x = session->getValue<std::string>("str"); x) {
       cout << "str: " << *x << endl;
     }
     if (auto x = session->getValue<int>("num"); x) {
       cout << "num: " << *x << endl;
     }
+    resp.setContentType("text/plain").setBody("get session");
+  }
+};
 
-    resp.body("get session");
+class GetHeaderService : public HttpService {
+public:
+  void doGet(const HttpRequest &req, HttpResponse &resp) {
+    auto root = std::make_shared<JsonObject>();
+    auto e1 = root->add("headers", new JsonObject).second->toJsonObject();
+    req.getHeader().forEach(
+        [&](const auto &k, const auto &v) { e1->add(k, v); });
+    auto e2 = root->add("others", new JsonObject).second->toJsonObject();
+    e2->add("full_url", req.getFullUrl());
+    e2->add("url", req.getUrl());
+    e2->add("query_string", req.getQueryString());
+    e2->add("remote_address", req.getInetAddress().toString());
+    resp.setBodyJson(root.get());
   }
 };
 
@@ -125,11 +145,10 @@ void handlerSignal(int) { server.quit(); }
 int main() {
   ::signal(SIGINT, handlerSignal);
 
-  server.addMountDir("/", "./html/");
-
+  server.addMountDir("/", "./html");
   server.addService<SetSessionService>("/set");
   server.addService<GetSessionService>("/get");
-
+  server.addService<GetHeaderService>("/json");
   server.addService<LoginTestService>("/login");
   server.addService<PostTestService>("/post");
 
