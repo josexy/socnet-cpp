@@ -1,10 +1,11 @@
 #ifndef SOC_UTILITY_FILEUTIL_H
 #define SOC_UTILITY_FILEUTIL_H
 
-#include "../../net/include/Buffer.h"
+#include <fcntl.h>
 #include <filesystem>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 namespace soc {
 class FileUtil {
@@ -15,10 +16,11 @@ public:
 
   bool load(std::string_view file);
   bool isOpen() const { return fp_ != nullptr; }
-
   bool readLine(std::string &line);
-  std::string_view readAll(net::Buffer *buffer);
 
+  static int openFile(std::string_view file);
+  static void closeFile(int fd);
+  static int read(int fd, void *data, size_t size);
   static bool exist(std::string_view file);
 
 private:

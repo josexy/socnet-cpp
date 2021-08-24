@@ -36,32 +36,14 @@ bool FileUtil::readLine(std::string &line) {
   return true;
 }
 
-// can read binary file or regular file
-std::string_view FileUtil::readAll(net::Buffer *buffer) {
-  if (!fp_)
-    return 0;
+int FileUtil::openFile(std::string_view file) {
+  return ::open(file.data(), O_RDONLY);
+}
 
-  int fd = ::fileno(fp_);
-  struct stat st;
-  ::fstat(fd, &st);
+void FileUtil::closeFile(int fd) { ::close(fd); }
 
-  constexpr static size_t M = 2 * 1024 * 1024;
-
-  char *svbuf = nullptr;
-  if (st.st_size <= M) {
-    buffer->ensureWritable(st.st_size);
-    ::fread(buffer->beginWrite(), sizeof(char), st.st_size, fp_);
-    buffer->hasWritten(st.st_size);
-    svbuf = buffer->beginRead();
-  } else {
-    char *mapping = static_cast<char *>(
-        ::mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
-    if (mapping == MAP_FAILED)
-      return 0;
-    buffer->appendMapping(mapping, st.st_size);
-    svbuf = buffer->mappingAddr();
-  }
-  return std::string_view(svbuf, st.st_size);
+int FileUtil::read(int fd, void *data, size_t size) {
+  return ::read(fd, data, size);
 }
 
 bool FileUtil::exist(std::string_view file) {
