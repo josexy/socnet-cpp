@@ -14,8 +14,9 @@ class HttpServer : private HttpSessionServer {
 public:
   class DefaultErrorService : public HttpErrorService {
   public:
-    void doError(int code, const HttpRequest &req, HttpResponse &resp) override;
-    std::string baseErrorPage(int code);
+    bool doError(int code, const HttpRequest &req, HttpResponse &resp) {
+      return false;
+    }
   };
 
   HttpServer();
@@ -58,13 +59,13 @@ private:
 
   bool dispatchMountDir(const HttpRequest &, HttpResponse &);
   bool dispatchUrlPattern(const HttpRequest &, HttpResponse &);
-  bool dispatchPhpProcessor(const std::string &, const HttpRequest &,
+  void dispatchPhpProcessor(const std::string &, const HttpRequest &,
                             HttpResponse &);
   bool dispatchFile(std::string_view, std::string_view, std::string,
                     const HttpRequest &, HttpResponse &);
 
   std::string mappingMimeType(const std::string_view &);
-  void getIndexPageFileName(bool, std::string &);
+  bool getIndexPageFileName(std::string &);
 
   void setIdleTime(int millsecond);
   void setCertificate(const std::string &cert_file,
@@ -75,7 +76,7 @@ private:
   void associateRequestSession(const HttpRequest &, HttpResponse &);
 
   HttpSession *associateSession(HttpRequest *) override;
-  void handleSessionTimeout(HttpSession*);
+  void handleSessionTimeout(HttpSession *);
 
 private:
   std::unique_ptr<TcpServer> server_;

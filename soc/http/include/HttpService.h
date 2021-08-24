@@ -20,30 +20,30 @@ public:
   virtual ~HttpService() {}
 
   virtual void doHead(const HttpRequest &req, HttpResponse &resp) {
-    resp.code(405);
+    doGet(req, resp);
   }
   virtual void doGet(const HttpRequest &req, HttpResponse &resp) {
-    resp.code(405);
+    resp.setCode(HttpStatus::METHOD_NOT_ALLOWED);
   }
   virtual void doPost(const HttpRequest &req, HttpResponse &resp) {
-    resp.code(405);
+    resp.setCode(HttpStatus::METHOD_NOT_ALLOWED);
   }
 
 private:
   void service(const HttpRequest &req, HttpResponse &resp) override;
-  void service(const HttpRequest &req, HttpResponse &resp,
-               const MatchGroup &match);
+  void service0(const HttpRequest &req, HttpResponse &resp, MatchGroup &match);
 };
 
 class HttpErrorService : public BaseService {
 public:
   friend class HttpServer;
 
-  virtual void doError(int code, const HttpRequest &req,
+  virtual bool doError(int code, const HttpRequest &req,
                        HttpResponse &resp) = 0;
 
 private:
   virtual void service(const HttpRequest &req, HttpResponse &resp) override;
+  std::string baseErrorPage(int code);
 };
 
 } // namespace http

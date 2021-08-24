@@ -2,7 +2,7 @@
 using namespace soc::http;
 
 void HttpService::service(const HttpRequest &req, HttpResponse &resp) {
-  switch (req.method()) {
+  switch (req.getMethod()) {
   case HttpMethod::HEAD:
     doHead(req, resp);
     break;
@@ -17,12 +17,21 @@ void HttpService::service(const HttpRequest &req, HttpResponse &resp) {
   }
 }
 
-void HttpService::service(const HttpRequest &req, HttpResponse &resp,
-                          const MatchGroup &match) {
-  req.match_ = match;
+void HttpService::service0(const HttpRequest &req, HttpResponse &resp,
+                           MatchGroup &match) {
+  req.match_.swap(match);
   service(req, resp);
 }
 
 void HttpErrorService::service(const HttpRequest &req, HttpResponse &resp) {
-  doError(resp.code(), req, resp);
+  int code = resp.getCode();
+  if (!doError(code, req, resp)) // Unhandled error code
+    resp.setHeader("Content-Type", "text/html").setBody(baseErrorPage(code));
+}
+
+std::string HttpErrorService::baseErrorPage(int code) {
+  std::string text = std::to_string(code) + " " + Status_Code.at(code);
+  return R"(<html><head><title>)" + text +
+         R"(</title></head><body><center><h1>)" + text +
+         R"(</h1></center><hr><center>socnet</center></body></html>)";
 }

@@ -3,19 +3,6 @@
 #include <regex>
 
 using namespace soc::http;
-using std::placeholders::_1;
-
-void HttpServer::DefaultErrorService::doError(int code, const HttpRequest &req,
-                                              HttpResponse &resp) {
-  resp.header("Content-Type", "text/html").body(baseErrorPage(code));
-}
-
-std::string HttpServer::DefaultErrorService::baseErrorPage(int code) {
-  std::string text = std::to_string(code) + " " + Status_Code.at(code);
-  return R"(<html><head><title>)" + text +
-         R"(</title></head><body><center><h1>)" + text +
-         R"(</h1></center><hr><center>socnet</center></body></html>)";
-}
 
 HttpServer::HttpServer() {
   server_ = std::make_unique<TcpServer>();
@@ -41,7 +28,8 @@ void HttpServer::initialize() {
                    GET_CONFIG(std::string, "https", "password"));
   }
 
-  server_->setMessageCallback(std::bind(&HttpServer::onMessage, this, _1));
+  server_->setMessageCallback(
+      std::bind(&HttpServer::onMessage, this, std::placeholders::_1));
 
   setErrorService<DefaultErrorService>();
 }
@@ -69,8 +57,11 @@ void HttpServer::setCertificate(const std::string &cert_file,
 }
 
 HttpSession *HttpServer::createSession() {
-  std::string session_id = "SESSIONID_" + EncodeUtil::genRandromStr(16);
-  HttpSession *session = new HttpSession(session_id);
+  char id[16], session_id[27]{0};
+  EncodeUtil::genRandromStr(id);
+  ::sprintf(session_id, "SESSIONID_%s", id);
+  static const int interval = GET_CONFIG(int, "server", "session_lifetime");
+  HttpSession *session = new HttpSession(session_id, interval);
   sessions_.add(session_id, std::shared_ptr<HttpSession>(session));
   return session;
 }
@@ -86,15 +77,15 @@ void HttpServer::addMountDir(const std::string &url, const std::string &dir) {
 
 bool HttpServer::onMessage(TcpConnection *conn) {
   HttpRequest *req = nullptr;
-  if (conn->context() == nullptr) {
-    req = new HttpRequest(conn->recver(), this);
+  if (conn->getContext() == nullptr) {
+    req = new HttpRequest(conn, this);
     conn->setContext(static_cast<void *>(req));
   } else {
-    req = static_cast<HttpRequest *>(conn->context());
+    req = static_cast<HttpRequest *>(conn->getContext());
   }
 
   auto code = req->parseRequest();
-  if (conn->disconnected() || conn->context() == nullptr) {
+  if (conn->isDisconnected() || conn->getContext() == nullptr) {
     if (req)
       delete req;
     return true;
@@ -104,7 +95,7 @@ bool HttpServer::onMessage(TcpConnection *conn) {
     // Connection: close
     conn->setKeepAlive(false);
     conn->setContext(nullptr);
-    resp.code(400).header("Connection", "close");
+    resp.setCode(HttpStatus::BAD_REQUEST).setHeader("Connection", "close");
     getErrorService()->service(*req, resp);
     resp.send();
 
@@ -113,20 +104,20 @@ bool HttpServer::onMessage(TcpConnection *conn) {
   } else if (code != HttpRequest::REQUEST_CONTENT_DONE)
     return false;
 
-  req->initialize();
+  req->reset();
 
   do {
     if (dispatchUrlPattern(*req, resp))
       break;
     if (dispatchMountDir(*req, resp))
       break;
-
-    resp.code(404);
-    getErrorService()->service(*req, resp);
-
   } while (0);
 
   associateRequestSession(*req, resp);
+
+  // client/server error code
+  if (resp.getCode() >= 400 && resp.getCode() < 600)
+    getErrorService()->service(*req, resp);
 
   resp.send();
 
@@ -138,7 +129,7 @@ bool HttpServer::onMessage(TcpConnection *conn) {
 HttpSession *HttpServer::associateSession(HttpRequest *req) {
   HttpSession *session = nullptr;
   // had already exist HttpSession
-  if (auto x = req->cookies().get("SESSIONID"); x.has_value()) {
+  if (auto x = req->getCookies().get("SESSIONID"); x.has_value()) {
     if (auto s = sessions_.get(x.value()); s.has_value()) {
       session = s.value().get();
       // The old session has been set to an invalid state, so it is
@@ -148,8 +139,8 @@ HttpSession *HttpServer::associateSession(HttpRequest *req) {
         session->setStatus(HttpSession::Accessed);
         // reset session timer
         server_->getSessionTimer()->adjust(Timer(
-            EncodeUtil::murmurHash2(session->id()),
-            TimeStamp::nowSecond(session->maxInactiveInterval()), nullptr));
+            EncodeUtil::murmurHash2(session->getId()),
+            TimeStamp::nowSecond(session->getMaxInactiveInterval()), nullptr));
       } else {
         session = nullptr;
       }
@@ -159,10 +150,10 @@ HttpSession *HttpServer::associateSession(HttpRequest *req) {
   if (session == nullptr) {
     session = createSession();
     server_->createSessionTimer(
-        TimeStamp::second(session->maxInactiveInterval()));
+        TimeStamp::second(session->getMaxInactiveInterval()));
     server_->getSessionTimer()->add(
-        Timer(EncodeUtil::murmurHash2(session->id()),
-              TimeStamp::nowSecond(session->maxInactiveInterval()),
+        Timer(EncodeUtil::murmurHash2(session->getId()),
+              TimeStamp::nowSecond(session->getMaxInactiveInterval()),
               std::bind(&HttpServer::handleSessionTimeout, this, session)));
   }
   return session;
@@ -171,7 +162,7 @@ HttpSession *HttpServer::associateSession(HttpRequest *req) {
 void HttpServer::handleSessionTimeout(HttpSession *session) {
   if (!session)
     return;
-  sessions_.remove(session->id());
+  sessions_.remove(session->getId());
 }
 
 void HttpServer::associateRequestSession(const HttpRequest &req,
@@ -179,9 +170,9 @@ void HttpServer::associateRequestSession(const HttpRequest &req,
   HttpSession *session = req.session_;
   if (session && session->isNew()) {
     HttpCookie cookie;
-    cookie.add("SESSIONID", session->id());
+    cookie.add("SESSIONID", session->getId());
     cookie.setPath("/");
-    resp.cookie(cookie);
+    resp.setCookie(cookie);
   }
 }
 
@@ -190,7 +181,7 @@ bool HttpServer::dispatchMountDir(const HttpRequest &req, HttpResponse &resp) {
   if (mount_dir_.empty())
     return status;
 
-  const std::string_view req_url = req.url();
+  const std::string_view req_url = req.getUrl();
 
   mount_dir_.each([&](const auto &prefix, const auto &dir) {
     if (req_url.starts_with(prefix)) {
@@ -199,7 +190,8 @@ bool HttpServer::dispatchMountDir(const HttpRequest &req, HttpResponse &resp) {
     }
     return false;
   });
-
+  if (!status)
+    resp.setCode(HttpStatus::NOT_FOUND);
   return status;
 }
 
@@ -207,7 +199,7 @@ bool HttpServer::dispatchUrlPattern(const HttpRequest &req,
                                     HttpResponse &resp) {
   bool status = false;
   // basic url
-  if (auto x = services_.get(req.url()); x.has_value()) {
+  if (auto x = services_.get(req.getUrl()); x.has_value()) {
     x.value()->service(req, resp);
     return true;
   } else {
@@ -218,11 +210,11 @@ bool HttpServer::dispatchUrlPattern(const HttpRequest &req,
 
       urlp_services_.each([&](const auto &urlp, const auto &service) {
         rgx = std::regex(urlp, std::regex::extended | std::regex::ECMAScript);
-        if (std::regex_search(req.url(), m, rgx)) {
+        if (std::regex_search(req.getUrl(), m, rgx)) {
           std::vector<std::string> match;
           for (size_t i = 1; i < m.size(); ++i)
             match.emplace_back(m.str(i));
-          service->service(req, resp, match);
+          service->service0(req, resp, match);
           return status = true;
         }
         return false;
@@ -240,90 +232,96 @@ bool HttpServer::dispatchFile(std::string_view prefix, std::string_view req_url,
   // absolute path
   path.append(req_url.data(), req_url.size());
 
-  bool enable_php = GET_CONFIG(bool, "server", "enable_php");
-
+  bool find_status = false;
   // directory
   if (path.back() == '/') {
     // get default index page
-    getIndexPageFileName(enable_php, path);
+    find_status = getIndexPageFileName(path);
+    if (!find_status) {
+      resp.setCode(HttpStatus::FORBIDDEN);
+      return true;
+    }
   }
 
-  // page not found
-  if (!FileUtil::exist(path))
+  // file not exist
+  if (!find_status && !FileUtil::exist(path))
     return false;
+
+  static const bool enable_php = GET_CONFIG(bool, "server", "enable_php");
 
   // PHP processor
   if (path.ends_with(".php")) {
-    if (!enable_php) {
-      resp.code(404);
-      getErrorService()->service(req, resp);
-    } else if (!dispatchPhpProcessor(path, req, resp)) {
-      getErrorService()->service(req, resp);
-    }
+    if (enable_php)
+      dispatchPhpProcessor(path, req, resp);
+    else
+      resp.setCode(HttpStatus::FORBIDDEN);
   } else {
-    resp.header("Content-Type", mappingMimeType(path)).bodyFile(path);
+    resp.setHeader("Content-Type", mappingMimeType(path)).setBodyFile(path);
   }
   return true;
 }
 
-bool HttpServer::dispatchPhpProcessor(const std::string &path,
+void HttpServer::dispatchPhpProcessor(const std::string &path,
                                       const HttpRequest &req,
                                       HttpResponse &resp) {
   PhpFastCgi fcgi;
-  if (EXIST_CONFIG("php-fpm", "server_ip")) {
-    if (!fcgi.connectPhpFpm(GET_CONFIG(std::string, "php-fpm", "server_ip"),
-                            GET_CONFIG(int, "php-fpm", "server_port"))) {
+  static const bool tcp_or_domain =
+      GET_CONFIG(bool, "php-fpm", "tcp_or_domain");
+
+  if (tcp_or_domain) {
+    static const std::string ip =
+        GET_CONFIG(std::string, "php-fpm", "server_ip");
+    static const int port = GET_CONFIG(int, "php-fpm", "server_port");
+    if (!fcgi.connectPhpFpm(ip, port)) {
       // error
-      resp.code(500);
-      return false;
-    }
-  } else if (EXIST_CONFIG("php-fpm", "sock_path")) {
-    if (!fcgi.connectPhpFpm(GET_CONFIG(std::string, "php-fpm", "sock_path"))) {
-      // error
-      resp.code(500);
-      return false;
+      resp.setCode(HttpStatus::INTERNAL_SERVER_ERROR);
+      return;
     }
   } else {
-    // error
-    resp.code(500);
-    return false;
+    static const std::string path =
+        GET_CONFIG(std::string, "php-fpm", "sock_path");
+    if (!fcgi.connectPhpFpm(path)) {
+      // error
+      resp.setCode(HttpStatus::INTERNAL_SERVER_ERROR);
+      return;
+    }
   }
 
   fcgi.sendStartRequestRecord();
   fcgi.sendParams(FCGI_Params::SCRIPT_FILENAME, path);
 
-  if (req.auth() != nullptr) {
-    if (req.auth()->type() == HttpAuthType::Basic) {
+  if (req.getAuth() != nullptr) {
+    if (req.getAuth()->getAuthType() == HttpAuthType::Basic) {
       // Basic Authorization
-      auto auth = dynamic_cast<HttpBasicAuth *>(req.auth());
-      fcgi.sendParams(FCGI_Params::PHP_AUTH_USER, auth->username());
-      fcgi.sendParams(FCGI_Params::PHP_AUTH_PW, auth->password());
-    } else if (req.auth()->type() == HttpAuthType::Digest) {
+      auto auth = dynamic_cast<HttpBasicAuth *>(req.getAuth());
+      fcgi.sendParams(FCGI_Params::PHP_AUTH_USER, auth->getUsername());
+      fcgi.sendParams(FCGI_Params::PHP_AUTH_PW, auth->getPassword());
+    } else if (req.getAuth()->getAuthType() == HttpAuthType::Digest) {
       // Digest Authorization
-      auto auth = dynamic_cast<HttpDigestAuth *>(req.auth());
-      fcgi.sendParams(FCGI_Params::PHP_AUTH_DIGEST, auth->digestInfo());
+      auto auth = dynamic_cast<HttpDigestAuth *>(req.getAuth());
+      fcgi.sendParams(FCGI_Params::PHP_AUTH_DIGEST, auth->getDigestInfo());
     }
   }
 
   if (req.hasQueryString()) {
-    fcgi.sendParams(FCGI_Params::QUERY_STRING, req.queryStr());
+    fcgi.sendParams(FCGI_Params::QUERY_STRING, req.getQueryString());
   }
 
-  if (req.method() == HttpMethod::HEAD) {
+  if (req.getMethod() == HttpMethod::HEAD) {
     fcgi.sendParams(FCGI_Params::REQUEST_METHOD, "HEAD");
     fcgi.sendEndRequestRecord();
-  } else if (req.method() == HttpMethod::GET) {
+  } else if (req.getMethod() == HttpMethod::GET) {
     fcgi.sendParams(FCGI_Params::REQUEST_METHOD, "GET");
     fcgi.sendEndRequestRecord();
-  } else if (req.method() == HttpMethod::POST) {
+  } else if (req.getMethod() == HttpMethod::POST) {
     fcgi.sendParams(FCGI_Params::REQUEST_METHOD, "POST");
-    if (auto type = req.header().get("Content-Type"); type.has_value()) {
+    if (auto type = req.getHeader().get("Content-Type"); type.has_value()) {
       fcgi.sendParams(FCGI_Params::CONTENT_TYPE, type.value());
       fcgi.sendParams(FCGI_Params::CONTENT_LENGTH,
-                      std::to_string(req.postData().size()));
+                      std::to_string(req.getPostData().size()));
     }
     fcgi.sendEndRequestRecord();
-    fcgi.sendPost(req.postData());
+    fcgi.sendPost(req.getPostData());
   }
 
   Buffer buffer;
@@ -334,50 +332,49 @@ bool HttpServer::dispatchPhpProcessor(const std::string &path,
   HttpHeader header;
 
   int index = header.parse(sv);
-  resp.header(header);
+  resp.setHeader(header);
   if (auto x = header.get("Status"); x.has_value()) {
     std::string_view status = x.value();
     std::string_view codesv = status.substr(0, status.find_first_of(" "));
     int code = std::atoi(std::string(codesv.data(), codesv.size()).data());
-    resp.code(code);
+    resp.setCode(code);
   }
 
-  if (!ret.first && resp.code() != 200)
-    return false;
+  if (!ret.first && resp.getCode() != 200)
+    return;
 
   sv.remove_prefix(index);
-  resp.body(sv);
-  return true;
+  resp.setBody(sv);
 }
 
 std::string HttpServer::mappingMimeType(const std::string_view &url) {
   size_t i = url.find_last_of(".");
 
-  std::string type;
+  // The file has no extension
   if (i == std::string_view::npos) {
-    return type = "*/*";
+    return "application/octet-stream";
   }
-  if (auto it = Content_Type.find(hash_ext(url.substr(i + 1)));
+
+  std::string type;
+  if (auto it = Content_Type.find(hashExt(url.substr(i + 1)));
       it != Content_Type.end())
     type = it->second;
-  else
-    type = "*/*"; // or text/plain
+  else // default mime type
+    type = "application/octet-stream";
 
-  if (!type.starts_with("*/*") &&
-      (type.starts_with("text") || type.ends_with("xml") ||
-       type.ends_with("javascript") || type.ends_with("json"))) {
+  if (type.starts_with("text") || type.ends_with("xml") ||
+      type.ends_with("javascript") || type.ends_with("json")) {
     type += " ;charset=utf-8";
   }
   return type;
 }
 
-void HttpServer::getIndexPageFileName(bool php, std::string &dir) {
+bool HttpServer::getIndexPageFileName(std::string &dir) {
   for (const auto &index_page : default_pages_) {
-    if (!php && index_page.ends_with(".php"))
-      continue;
     if (FileUtil::exist(dir + index_page)) {
       dir += index_page;
-      break;
+      return true;
     }
   }
+  return false;
 }
