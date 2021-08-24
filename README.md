@@ -12,6 +12,7 @@ A high performance HTTP server based on linux epoll designed by C++ 20
 - 支持Gzip压缩算法
 - 通过php-fpm解析PHP文件，实现动态web服务器
 - 采用json配置文件
+- 支持sendfile和mmap （OpenSSL不支持sendfile，默认mmap）
 - ...
 
 ## C++17/20特性
@@ -44,7 +45,9 @@ using namespace soc::http;
 class TestService : public HttpService {
 public:
   void doGet(const HttpRequest &req, HttpResponse &resp) override {
-    resp.body("hello world");
+    req.getHeader().forEach(
+        [](auto &k, auto &v) { cout << k << ": " << v << '\n'; });
+    resp.setContentType("text/plain").setBody("hello world");
   }
 };
 
@@ -67,10 +70,14 @@ int main() {
         "server_hostname": "localhost",
         "enable_https": false,
         "enable_php": true,
+        "enable_sendfile": false,
         "default_page": [
             "index.php",
             "index.html"
-        ]
+        ],
+        "user_pass_file": "./pass_store/user_password",
+        "authenticate_realm": "socnet@test",
+        "session_lifetime": 10
     },
     "https": {
         "cert_file": "./ssl/cert.crt",
@@ -78,6 +85,7 @@ int main() {
         "password": ""
     },
     "php-fpm": {
+        "tcp_or_domain": true,
         "server_ip": "127.0.0.1",
         "server_port": 9000,
         "sock_path": "/run/php-fpm/php-fpm.sock"
