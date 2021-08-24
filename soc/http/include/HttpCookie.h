@@ -6,7 +6,7 @@
 namespace soc {
 namespace http {
 
-class   HttpCookie : public HttpMap<std::string, std::string> {
+class HttpCookie : public HttpMap<std::string, std::string> {
 public:
   HttpCookie() : max_age_(0), secure_(false), http_only_(false) {}
   ~HttpCookie() {}
@@ -14,17 +14,17 @@ public:
   std::string toString() const;
 
   void setExpires(const std::string &expires) { expires_ = expires; }
-  const std::string &expires() const noexcept { return expires_; }
+  const std::string &getExpires() const noexcept { return expires_; }
   void setDomain(const std::string &domain) { domain_ = domain; }
-  const std::string &domain() const noexcept { return domain_; }
+  const std::string &getDomain() const noexcept { return domain_; }
   void setPath(const std::string &path) { path_ = path; }
-  const std::string &path() const noexcept { return path_; }
+  const std::string &getPath() const noexcept { return path_; }
   void setMaxAge(int second) { max_age_ = second; }
-  int maxAge() const noexcept { return max_age_; }
+  int getMaxAge() const noexcept { return max_age_; }
   void setSecure(bool secure) { secure_ = secure; }
-  bool secure() const noexcept { return secure_; }
+  bool isSecure() const noexcept { return secure_; }
   void setHttpOnly(bool httponly) { http_only_ = httponly; }
-  bool httpOnly() const noexcept { return http_only_; }
+  bool isHttpOnly() const noexcept { return http_only_; }
 
 private:
   std::string expires_;

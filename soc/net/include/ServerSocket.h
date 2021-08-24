@@ -7,11 +7,11 @@ namespace soc {
 namespace net {
 
 namespace option {
-int nonBlockingSocket();
+int createNBSocket();
 void setNonBlocking(int fd);
 void setNoDelay(int fd);
-InetAddress peername(int fd);
-InetAddress sockname(int fd);
+InetAddress getPeerName(int fd);
+InetAddress getSockName(int fd);
 } // namespace option
 
 class ServerSocket {
@@ -19,7 +19,7 @@ public:
   explicit ServerSocket(int sockfd) : fd_(sockfd) {}
   ~ServerSocket();
 
-  int fd() const noexcept { return fd_; }
+  int getFd() const noexcept { return fd_; }
   void bind(const InetAddress &address);
   void listen();
   std::pair<int, InetAddress> accept();

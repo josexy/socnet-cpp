@@ -56,8 +56,8 @@ public:
 
   std::pair<bool, std::string> readPhpFpm(net::Buffer *buffer);
 
-  int fd() const { return sockfd_; }
-  int reqId() const { return requestId_; }
+  int getFd() const { return sockfd_; }
+  int getRequestId() const { return requestId_; }
 
 private:
   std::unordered_map<FCGI_Params, std::string> params_;

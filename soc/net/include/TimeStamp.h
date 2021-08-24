@@ -76,7 +76,7 @@ public:
     return TimeStamp::now() + nanosecond(nsec);
   }
 
-  static std::string serverDate() {
+  static std::string getServerDate() {
     char buffer[50]{0};
     time_t t = ::time(nullptr);
     ::strftime(buffer, 50, "%a, %d %b %Y %H:%M:%S GMT", ::gmtime(&t));

@@ -23,7 +23,7 @@ public:
   ~ThreadPool() {
     if (!running_)
       return;
-    shutdown();
+    shutdownAll();
   }
   void add(const Task &task) {
     if (!running_)
@@ -34,7 +34,7 @@ public:
     }
     cond_.notify_one();
   }
-  void shutdown() {
+  void shutdownAll() {
     running_ = false;
     cond_.notify_all();
     for (auto &th : threads_) {

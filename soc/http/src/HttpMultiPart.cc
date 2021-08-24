@@ -1,13 +1,13 @@
 #include "../include/HttpMultiPart.h"
-
+#include <cstring>
 using namespace soc::http;
 
-auto HttpMultiPart::value(const std::string &name) const
+auto HttpMultiPart::getValue(const std::string &name) const
     -> std::optional<std::string> {
   return form_.get(name);
 }
 
-auto HttpMultiPart::file(const std::string &name, size_t index) const
+auto HttpMultiPart::getFile(const std::string &name, size_t index) const
     -> HttpMultiPart::Part * {
   Part *p = nullptr;
   if (files_.contain(name)) {
@@ -56,7 +56,7 @@ void HttpMultiPart::parse(std::string_view body) {
       break;
     }
     case end_boundary: {
-      if (::strncmp(body.data() + i, "Content-Disposition", 19) == 0) {
+      if (::strncasecmp(body.data() + i, "Content-Disposition", 19) == 0) {
         state = start_content_disposition;
         i += 19; // skip "Content-Disposition"
       } else {
@@ -101,7 +101,7 @@ void HttpMultiPart::parse(std::string_view body) {
         state = start_content_data;
       } else {
         // file type
-        if (::strncmp(body.data() + i, "Content-Type", 12) == 0) {
+        if (::strncasecmp(body.data() + i, "Content-Type", 12) == 0) {
           i += 14; // skip "Content-Type"
           file_mark = true;
           state = start_content_type;

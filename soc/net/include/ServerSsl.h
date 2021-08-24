@@ -12,7 +12,7 @@ public:
                      const std::string &password);
   ~ServerSsl();
 
-  SSL_CTX *sslCtx() const noexcept { return ctx_; }
+  SSL_CTX *getSslCtx() const noexcept { return ctx_; }
   SslChannel *createSslChannel(int connfd);
   int accept(SslChannel *channel) { return ::SSL_accept(channel->ssl()); }
 

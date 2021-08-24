@@ -2,7 +2,6 @@
 #define SOC_HTTP_HTTPAUTH_H
 
 #include "HttpPassStore.h"
-#include <string.h>
 
 namespace soc {
 namespace http {
@@ -12,7 +11,7 @@ enum class HttpAuthType { Basic = 0x01, Digest = 0x02 };
 class HttpAuth {
 public:
   virtual bool verify() const = 0;
-  virtual HttpAuthType type() const noexcept = 0;
+  virtual HttpAuthType getAuthType() const noexcept = 0;
 };
 
 class HttpBasicAuth : public HttpAuth {
@@ -21,16 +20,18 @@ public:
     user_ = std::string(user.data(), user.size());
     pass_ = std::string(pass.data(), pass.size());
     auto x = HttpPassStore::instance().fetch(user_);
-    if (!x.has_value())
-      return;
-    std::string hashv = user_ + ":" + kRealm + ":" + pass_;
-    verify_successed_ = EncodeUtil::md5HashEqual(hashv, x.value());
+    // user authentication succeeded
+    if (x.has_value()) {
+      std::string hashv =
+          user_ + ":" + HttpPassStore::instance().getRealm() + ":" + pass_;
+      verify_successed_ = EncodeUtil::md5HashEqual(hashv, x.value());
+    }
   }
 
-  const std::string &username() const noexcept { return user_; }
-  const std::string &password() const noexcept { return pass_; }
+  const std::string &getUsername() const noexcept { return user_; }
+  const std::string &getPassword() const noexcept { return pass_; }
   bool verify() const override { return verify_successed_; }
-  HttpAuthType type() const noexcept override { return HttpAuthType::Basic; }
+  HttpAuthType getAuthType() const noexcept { return HttpAuthType::Basic; }
 
 private:
   bool verify_successed_ = false;
@@ -98,9 +99,9 @@ public:
         EncodeUtil::md5HashEqual(buffer, response.value().data());
   }
 
-  const std::string &digestInfo() const noexcept { return digest_info_; }
+  const std::string &getDigestInfo() const noexcept { return digest_info_; }
   bool verify() const override { return verify_successed_; }
-  HttpAuthType type() const noexcept override { return HttpAuthType::Digest; }
+  HttpAuthType getAuthType() const noexcept { return HttpAuthType::Digest; }
 
 private:
   bool verify_successed_ = false;

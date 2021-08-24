@@ -18,12 +18,12 @@ void option::setNoDelay(int fd) {
   ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 }
 
-int option::nonBlockingSocket() {
+int option::createNBSocket() {
   return ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC,
                   IPPROTO_TCP);
 }
 
-InetAddress option::peername(int fd) {
+InetAddress option::getPeerName(int fd) {
   sockaddr_in sockaddrIn;
   socklen_t len = sizeof(sockaddrIn);
   ::getpeername(fd, (sockaddr *)&sockaddrIn, &len);
@@ -31,7 +31,7 @@ InetAddress option::peername(int fd) {
   return address;
 }
 
-InetAddress option::sockname(int fd) {
+InetAddress option::getSockName(int fd) {
   sockaddr_in sockaddrIn;
   socklen_t len = sizeof(sockaddrIn);
   ::getsockname(fd, (sockaddr *)&sockaddrIn, &len);
@@ -42,7 +42,7 @@ InetAddress option::sockname(int fd) {
 ServerSocket::~ServerSocket() { ::close(fd_); }
 
 void ServerSocket::bind(const InetAddress &address) {
-  if (::bind(fd_, address.saddr(), sizeof(sockaddr_in)) < 0)
+  if (::bind(fd_, address.getSockAddr(), sizeof(sockaddr_in)) < 0)
     ::exit(-1);
 }
 

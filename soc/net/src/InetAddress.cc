@@ -19,7 +19,7 @@ InetAddress::InetAddress(const std::string &ip, uint16_t port) {
   ::inet_pton(AF_INET, ip.data(), &sockin_.sin_addr);
 }
 
-std::string InetAddress::ip() const noexcept {
+std::string InetAddress::getIp() const noexcept {
   char buf[64];
   ::inet_ntop(AF_INET, &sockin_.sin_addr, buf, sizeof(sockin_));
   return std::string(buf);

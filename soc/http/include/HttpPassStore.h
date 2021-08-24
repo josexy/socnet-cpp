@@ -1,15 +1,13 @@
 #ifndef SOC_HTTP_HTTPPASSSTORE_H
 #define SOC_HTTP_HTTPPASSSTORE_H
 
+#include "../../utility/include/AppConfig.h"
 #include "../../utility/include/EncodeUtil.h"
 #include "../../utility/include/FileUtil.h"
 #include "HttpMap.h"
 
 namespace soc {
 namespace http {
-
-static constexpr const char *kPassFile = "./pass_store/user_password";
-static constexpr const char *kRealm = "socnet@test";
 
 class HttpPassStore {
 public:
@@ -22,6 +20,8 @@ public:
     return user_pass_.get(user);
   }
 
+  const std::string &getRealm() const noexcept { return realm_; }
+
 private:
   HttpPassStore(const HttpPassStore &) = delete;
   HttpPassStore(HttpPassStore &&) = delete;
@@ -29,20 +29,24 @@ private:
   HttpPassStore &operator=(HttpPassStore &&) = delete;
 
   HttpPassStore() {
-    FileUtil loader(kPassFile);
+    realm_ = GET_CONFIG(std::string, "server", "authenticate_realm");
+    std::string file = GET_CONFIG(std::string, "server", "user_pass_file");
+
+    FileUtil loader(file);
     if (!loader.isOpen()) {
-      ::fprintf(stderr, "user-password file not found : %s\n", kPassFile);
-      ::exit(-1);
-    }
-    std::string line;
-    while (loader.readLine(line)) {
-      // {user:md5(username:realm:password)}
-      size_t pos = line.find_first_of(":");
-      user_pass_.add(line.substr(0, pos), line.substr(pos + 1));
+      ::fprintf(stderr, "user-password file not found : [%s]\n", file.c_str());
+    } else {
+      std::string line;
+      while (loader.readLine(line)) {
+        // {user:md5(username:realm:password)}
+        size_t pos = line.find_first_of(":");
+        user_pass_.add(line.substr(0, pos), line.substr(pos + 1));
+      }
     }
   }
 
   HttpMap<std::string, std::string> user_pass_;
+  std::string realm_;
 };
 
 } // namespace http

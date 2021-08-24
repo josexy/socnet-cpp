@@ -14,8 +14,8 @@ public:
   void runOnce(const TimeStamp &t);
   void runEvery(const TimeStamp &t);
 
-  int fd() const { return tmfd_; }
-  const Timer &expiredTimer() { return timer_heap_->top(); }
+  int getFd() const { return tmfd_; }
+  const Timer &getExpiredTimer() { return timer_heap_->top(); }
 
   void add(const Timer &);
   void adjust(const Timer &);

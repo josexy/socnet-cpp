@@ -22,9 +22,9 @@ public:
   };
 
   void setBoundary(const std::string &boundary) noexcept { bd_ = boundary; }
-  const std::string &boundary() const noexcept { return bd_; }
-  std::optional<std::string> value(const std::string &name) const;
-  Part *file(const std::string &name, size_t index = 0) const;
+  const std::string &getBoundary() const noexcept { return bd_; }
+  std::optional<std::string> getValue(const std::string &name) const;
+  Part *getFile(const std::string &name, size_t index = 0) const;
 
   void parse(std::string_view body);
 

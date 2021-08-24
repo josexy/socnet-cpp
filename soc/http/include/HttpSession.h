@@ -10,11 +10,11 @@ class HttpSession : public HttpMap<std::string, std::any> {
 public:
   enum Status { New, Accessed, Destroy };
 
-  HttpSession(const std::string &id)
-      : id_(id), interval_(10), status_(Status::New) {}
+  HttpSession(const std::string &id, int interval)
+      : id_(id), interval_(interval), status_(Status::New) {}
   ~HttpSession() {}
 
-  const std::string &id() const noexcept {
+  const std::string &getId() const noexcept {
     ReadLock locker(mutex_);
     return id_;
   }
@@ -30,11 +30,11 @@ public:
     ReadLock locker(mutex_);
     return status_ == Status::Destroy;
   }
-  Status status() const noexcept {
+  Status getStatus() const noexcept {
     ReadLock locker(mutex_);
     return status_;
   }
-  int maxInactiveInterval() const noexcept {
+  int getMaxInactiveInterval() const noexcept {
     ReadLock locker(mutex_);
     return interval_;
   }
