@@ -2,6 +2,7 @@
 #define SOC_HTTP_HTTPHEADER_H
 
 #include "../../net/include/Buffer.h"
+#include "../../utility/include/EncodeUtil.h"
 #include "HttpMap.h"
 #include <map>
 
@@ -43,6 +44,9 @@ public:
   void forEach(const Callback &) const override;
 
   void store(net::Buffer *sender);
+
+protected:
+  void add0(const std::string &key, const std::string &value);
 
 private:
   std::multimap<std::string, std::string> headers_;

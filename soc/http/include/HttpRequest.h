@@ -6,7 +6,6 @@
 #include "HttpMultiPart.h"
 #include "HttpSession.h"
 #include "HttpSessionServer.h"
-
 namespace soc {
 namespace http {
 
@@ -28,19 +27,19 @@ public:
     AGAIN_CONTENT
   };
 
-  explicit HttpRequest(net::Buffer *recver, HttpSessionServer *owner);
+  explicit HttpRequest(net::TcpConnection *conn, HttpSessionServer *owner);
   ~HttpRequest();
 
-  void initialize();
-  void add(const std::string &key, const std::string &value);
-  std::optional<std::string> get(const std::string &key) const;
-  HttpMethod method() const noexcept { return method_; }
-  HttpVersion version() const noexcept { return version_; }
-  const HttpMultiPart &multiPart() const noexcept { return multipart_; }
-  const std::string &queryStr() const noexcept { return query_s_; }
-  const std::string &url() const noexcept { return url_; }
-  const std::string &phpMessage() const noexcept { return php_message_; }
-  std::string fullUrl() const noexcept;
+  void reset();
+  HttpMethod getMethod() const noexcept { return method_; }
+  HttpVersion getVersion() const noexcept { return version_; }
+  std::optional<std::string> getHeaderValue(const std::string &) const;
+  void setHeader(const std::string &, const std::string &);
+  const HttpMultiPart &getMultiPart() const noexcept { return multipart_; }
+  const std::string &getQueryString() const noexcept { return query_s_; }
+  const std::string &getUrl() const noexcept { return url_; }
+  const std::string &getPhpMessage() const noexcept { return php_message_; }
+  std::string getFullUrl() const noexcept;
 
   bool hasQueryString() const noexcept { return !query_.empty(); }
   bool hasForm() const noexcept { return !form_.empty(); }
@@ -49,19 +48,24 @@ public:
   bool isKeepAlive() const noexcept { return keepalive_; }
   bool isCompressed() const noexcept { return compressed_; }
 
-  const HttpHeader &header() const noexcept { return header_; }
-  const HttpMap<std::string, std::string> &query() const noexcept {
+  const HttpHeader &getHeader() const noexcept { return header_; }
+  const HttpCookie &getCookies() const noexcept { return cookies_; }
+  const std::string &getPostData() const noexcept { return post_data_; }
+  const net::InetAddress &getInetAddress() const noexcept {
+    return remote_addr_;
+  }
+  const HttpMap<std::string, std::string> &getQuery() const noexcept {
     return query_;
   }
-  const HttpMap<std::string, std::string> &form() const noexcept {
+  const HttpMap<std::string, std::string> &getForm() const noexcept {
     return form_;
   }
-  const HttpCookie &cookies() const noexcept { return cookies_; }
-  const std::string &postData() const noexcept { return post_data_; }
-  const std::vector<std::string> &match() const noexcept { return match_; }
+  const std::vector<std::string> &getMatchResult() const noexcept {
+    return match_;
+  }
 
-  HttpAuth *auth() const noexcept { return auth_; }
-  HttpSession *session() const;
+  HttpAuth *getAuth() const noexcept { return auth_; }
+  HttpSession *getSession() const;
 
   RetCode parseRequest();
 
@@ -96,6 +100,7 @@ private:
   HttpMultiPart multipart_;
   RetCode ret_code_;
   HttpCookie cookies_;
+  net::InetAddress remote_addr_;
 
   bool keepalive_;
   bool compressed_;

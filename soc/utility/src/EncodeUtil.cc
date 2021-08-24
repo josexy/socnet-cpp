@@ -218,12 +218,14 @@ void EncodeUtil::toUppers(char *s, size_t size) {
       s[i] = toupper(s[i]);
 }
 
-std::string EncodeUtil::genRandromStr(size_t n) {
-  std::string str;
-  str.resize(n);
-  static constexpr const char *alpha =
-      "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  for (size_t i = 0; i < n; ++i)
-    str[i] = alpha[::rand() % 62];
-  return str;
+std::string EncodeUtil::toLowers(const std::string &s) {
+  std::string ls(s);
+  toLowers(ls.data(), ls.size());
+  return ls;
+}
+
+std::string EncodeUtil::toUppers(const std::string &s) {
+  std::string us(s);
+  toUppers(us.data(), us.size());
+  return us;
 }

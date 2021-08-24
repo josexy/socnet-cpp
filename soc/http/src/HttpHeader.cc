@@ -32,8 +32,8 @@ int HttpHeader::parse(std::string_view header) {
       pos2++;
     pos2++;
     std::string_view value = line_header.substr(pos2, pos - pos2);
-    headers_.emplace(std::string(key.data(), key.size()),
-                     std::string(value.data(), value.size()));
+    add0(std::string(key.data(), key.size()),
+         std::string(value.data(), value.size()));
 
     header.remove_prefix(pos + 2);
     index += pos + 2;
@@ -42,39 +42,52 @@ int HttpHeader::parse(std::string_view header) {
 }
 
 void HttpHeader::add(const HttpHeader &header) {
-  WriteLock locker(mutex_);
-  headers_.insert(header.headers_.begin(), header.headers_.end());
+  std::lock(mutex_, header.mutex_);
+  WriteLock locker1(mutex_, std::adopt_lock);
+  WriteLock locker2(header.mutex_, std::adopt_lock);
+
+  for (const auto &[k, v] : header.headers_) {
+    add0(k, v);
+  }
 }
 
 void HttpHeader::add(const std::string &key, const std::string &value) {
   WriteLock locker(mutex_);
-  if (!key.starts_with("Set-Cookie")) {
-    if (auto x = headers_.find(key); x != headers_.end()) {
-      headers_.lower_bound(key)->second = value;
+  add0(key, value);
+}
+
+void HttpHeader::add0(const std::string &key, const std::string &value) {
+  // Save lowercase key
+  std::string k = EncodeUtil::toLowers(key);
+  if (!k.starts_with("set-cookie")) {
+    if (auto x = headers_.find(k); x != headers_.end()) {
+      headers_.lower_bound(k)->second = value;
       return;
     }
   }
-  headers_.emplace(std::forward<const std::string &>(key),
+  headers_.emplace(std::forward<const std::string &>(k),
                    std::forward<const std::string &>(value));
 }
 
 void HttpHeader::remove(const std::string &key) {
   WriteLock locker(mutex_);
-  if (headers_.find(key) != headers_.end()) {
-    headers_.erase(key);
+  std::string k = EncodeUtil::toLowers(key);
+  if (headers_.find(k) != headers_.end()) {
+    headers_.erase(k);
   }
 }
 
 std::optional<std::string> HttpHeader::get(const std::string &key) const {
   ReadLock locker(mutex_);
-  if (auto it = headers_.find(key); it != headers_.end())
+  std::string k = EncodeUtil::toLowers(key);
+  if (auto it = headers_.find(k); it != headers_.end())
     return std::make_optional(it->second);
   return std::nullopt;
 }
 
 bool HttpHeader::contain(const std::string &key) const noexcept {
   ReadLock locker(mutex_);
-  return headers_.find(key) != headers_.end();
+  return headers_.find(EncodeUtil::toLowers(key)) != headers_.end();
 }
 
 std::string HttpHeader::toString() const {

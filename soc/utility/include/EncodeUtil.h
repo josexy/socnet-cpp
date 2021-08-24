@@ -40,8 +40,15 @@ struct EncodeUtil {
 
   static void toLowers(char *, size_t);
   static void toUppers(char *, size_t);
+  static std::string toLowers(const std::string &);
+  static std::string toUppers(const std::string &);
 
-  static std::string genRandromStr(size_t);
+  template <size_t N> static inline void genRandromStr(char (&s)[N]) {
+    static constexpr const char *alpha =
+        "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (size_t i = 0; i < N; ++i)
+      s[i] = alpha[::rand() % 62];
+  }
 };
 } // namespace soc
 

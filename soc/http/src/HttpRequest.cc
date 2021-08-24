@@ -1,11 +1,12 @@
 #include "../include/HttpRequest.h"
 using namespace soc::http;
 
-HttpRequest::HttpRequest(net::Buffer *recver, HttpSessionServer *owner)
-    : recver_(recver), owner_(owner), keepalive_(false), compressed_(false),
+HttpRequest::HttpRequest(net::TcpConnection *conn, HttpSessionServer *owner)
+    : recver_(conn->getRecver()), owner_(owner),
+      remote_addr_(conn->getPeerAddr()), keepalive_(false), compressed_(false),
       has_multipart_(false), has_cookies_(false), auth_(nullptr),
       session_(nullptr) {
-  initialize();
+  reset();
 }
 
 HttpRequest::~HttpRequest() {
@@ -15,31 +16,33 @@ HttpRequest::~HttpRequest() {
   session_ = nullptr;
 }
 
-void HttpRequest::initialize() { ret_code_ = NO_REQUEST; }
+void HttpRequest::reset() { ret_code_ = NO_REQUEST; }
 
-void HttpRequest::add(const std::string &key, const std::string &value) {
+void HttpRequest::setHeader(const std::string &key, const std::string &value) {
   header_.add(key, value);
 }
 
-std::optional<std::string> HttpRequest::get(const std::string &key) const {
+std::optional<std::string>
+HttpRequest::getHeaderValue(const std::string &key) const {
   return header_.get(key);
 }
 
-std::string HttpRequest::fullUrl() const noexcept {
-  std::string schema =
-      GET_CONFIG(bool, "server", "enable_https") ? "https" : "http";
+std::string HttpRequest::getFullUrl() const noexcept {
+  static const bool on_https = GET_CONFIG(bool, "server", "enable_https");
+  static const bool has_host = EXIST_CONFIG("server", "server_hostname");
+  static const std::string schema = on_https ? "https" : "http";
+  static const int port = GET_CONFIG(int, "server", "listen_port");
   std::string host;
-  if (EXIST_CONFIG("server", "server_hostname")) {
+  if (has_host) {
     host = GET_CONFIG(std::string, "server", "server_hostname");
   } else {
     host = GET_CONFIG(std::string, "server", "listen_ip");
   }
-  return schema + ":" + "//" + host + ":" +
-         std::to_string(GET_CONFIG(int, "server", "listen_port")) +
-         EncodeUtil::urlDecode(req_url_.c_str(), req_url_.size());
+  return schema + ":" + "//" + host + ":" + std::to_string(port) +
+         EncodeUtil::urlDecode(req_url_.data(), req_url_.size());
 }
 
-HttpSession *HttpRequest::session() const {
+HttpSession *HttpRequest::getSession() const {
   session_ = owner_->associateSession(const_cast<HttpRequest *>(this));
   return session_;
 }
@@ -73,7 +76,7 @@ HttpRequest::RetCode HttpRequest::parseRequest() {
         // Before HTTP/1.0, the Connection field in Request or Response need
         // present. After HTTP/1.1, the Conection do not present in request and
         // response header Connection field
-        std::string_view v = conn.value();
+        std::string_view v = EncodeUtil::toLowers(conn.value());
         if (version_ == HttpVersion::HTTP_1_0 && v.starts_with("keep-alive"))
           keepalive_ = true;
         else if (v.starts_with("close"))
@@ -183,7 +186,7 @@ HttpRequest::RetCode HttpRequest::parseRequestContent() {
   // 1. application/x-www-form-urlencoded
   // 2. multipart/form-data
   if (has_multipart_) {
-    std::string eob = "--" + multipart_.boundary() + "--\r\n";
+    std::string eob = "--" + multipart_.getBoundary() + "--\r\n";
     if (!content.ends_with(eob))
       return ret_code_ = AGAIN_CONTENT;
     multipart_.parse(content);
