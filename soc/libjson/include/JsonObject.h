@@ -48,41 +48,41 @@ public:
     return add(std::shared_ptr<JsonString>(key),
                std::shared_ptr<JsonValue>(value));
   }
-  auto add(const string &key, JsonValue *value) {
+  auto add(const std::string &key, JsonValue *value) {
     return add(std::make_shared<JsonString>(key),
                std::shared_ptr<JsonValue>(value));
   }
-  auto add(const string &key, const string &value) {
+  auto add(const std::string &key, const std::string &value) {
     return add(std::make_shared<JsonString>(key),
                std::make_shared<JsonString>(value));
   }
-  auto add(const string &key, double value) {
+  auto add(const std::string &key, double value) {
     return add(std::make_shared<JsonString>(key),
                std::make_shared<JsonNumber>(value, false));
   }
-  auto add(const string &key, int value) {
+  auto add(const std::string &key, int value) {
     return add(std::make_shared<JsonString>(key),
                std::make_shared<JsonNumber>(value, true));
   }
-  auto add(const string &key) {
+  auto add(const std::string &key) {
     return add(std::make_shared<JsonString>(key), std::make_shared<JsonNull>());
   }
   template <class T, class E = std::enable_if_t<std::is_same<T, bool>::value>>
-  auto add(const string &key, T value) {
+  auto add(const std::string &key, T value) {
     return add(std::make_shared<JsonString>(key),
                std::make_shared<JsonBoolean>(value));
   }
 
   key_value_pair get(int index) {
     if (index < 0 || index >= (int)__kvObjects.size())
-      return make_pair<std::shared_ptr<JsonString>, std::shared_ptr<JsonValue>>(
-          nullptr, nullptr);
+      return std::make_pair<std::shared_ptr<JsonString>,
+                            std::shared_ptr<JsonValue>>(nullptr, nullptr);
     return __kvObjects[index];
   }
 
-  std::shared_ptr<JsonValue> find(const string &key) {
+  std::shared_ptr<JsonValue> find(const std::string &key) {
     for (auto &[k, v] : __kvObjects) {
-      if (key.compare(k->value<string>()) == 0)
+      if (key.compare(k->value<std::string>()) == 0)
         return v;
     }
     return nullptr;

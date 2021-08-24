@@ -18,7 +18,7 @@ void JsonParser::parseJsonObject(std::shared_ptr<JsonObject> &object) {
     handle_key_not_string_exception(key.get());
 
     std::shared_ptr<JsonString> key_ptr =
-        make_shared<JsonString>(key->value<std::string>(), lexer.escape);
+        std::make_shared<JsonString>(key->value<std::string>(), lexer.escape);
 
     handle_object_missing_separator_exception(key.get());
 
@@ -34,32 +34,32 @@ void JsonParser::parseJsonObject(std::shared_ptr<JsonObject> &object) {
     switch (value->tag()) {
     case Tag::JSON_OBJECT_BEGIN: { // {
       handle_after_object_array_exception(value.get());
-      std::shared_ptr<JsonObject> object_ptr = make_shared<JsonObject>();
+      std::shared_ptr<JsonObject> object_ptr = std::make_shared<JsonObject>();
       parseJsonObject(object_ptr);
       value_ptr = object_ptr;
     } break;
     case Tag::JSON_ARRAY_BEGIN: { // [
       handle_after_object_array_exception(value.get());
-      std::shared_ptr<JsonArray> array_ptr = make_shared<JsonArray>();
+      std::shared_ptr<JsonArray> array_ptr = std::make_shared<JsonArray>();
       parseJsonArray(array_ptr);
       value_ptr = array_ptr;
     } break;
     case Tag::JSON_NUMBER:
-      value_ptr = make_shared<JsonNumber>(value->value<int>(), true);
+      value_ptr = std::make_shared<JsonNumber>(value->value<int>(), true);
       break;
     case Tag::JSON_FLOAT:
-      value_ptr = make_shared<JsonNumber>(value->value<double>(), false);
+      value_ptr = std::make_shared<JsonNumber>(value->value<double>(), false);
       break;
     case Tag::JSON_STRING:
-      value_ptr =
-          make_shared<JsonString>(value->value<std::string>(), lexer.escape);
+      value_ptr = std::make_shared<JsonString>(value->value<std::string>(),
+                                               lexer.escape);
       break;
     case Tag::JSON_NULL:
-      value_ptr = make_shared<JsonNull>();
+      value_ptr = std::make_shared<JsonNull>();
       break;
     case Tag::JSON_TRUE:
     case Tag::JSON_FALSE:
-      value_ptr = make_shared<JsonBoolean>(value->value<bool>());
+      value_ptr = std::make_shared<JsonBoolean>(value->value<bool>());
       break;
     default:
       break;
@@ -87,32 +87,32 @@ void JsonParser::parseJsonArray(std::shared_ptr<JsonArray> &array) {
     switch (value->tag()) {
     case Tag::JSON_OBJECT_BEGIN: { // {
       handle_after_object_array_exception(value.get());
-      std::shared_ptr<JsonObject> object_ptr = make_shared<JsonObject>();
+      std::shared_ptr<JsonObject> object_ptr = std::make_shared<JsonObject>();
       parseJsonObject(object_ptr);
       value_ptr = object_ptr;
     } break;
     case Tag::JSON_ARRAY_BEGIN: { // [
       handle_after_object_array_exception(value.get());
-      std::shared_ptr<JsonArray> array_ptr = make_shared<JsonArray>();
+      std::shared_ptr<JsonArray> array_ptr = std::make_shared<JsonArray>();
       parseJsonArray(array_ptr);
       value_ptr = array_ptr;
     } break;
     case Tag::JSON_NUMBER:
-      value_ptr = make_shared<JsonNumber>(value->value<int>(), true);
+      value_ptr = std::make_shared<JsonNumber>(value->value<int>(), true);
       break;
     case Tag::JSON_FLOAT:
-      value_ptr = make_shared<JsonNumber>(value->value<double>(), false);
+      value_ptr = std::make_shared<JsonNumber>(value->value<double>(), false);
       break;
     case Tag::JSON_STRING:
-      value_ptr =
-          make_shared<JsonString>(value->value<std::string>(), lexer.escape);
+      value_ptr = std::make_shared<JsonString>(value->value<std::string>(),
+                                               lexer.escape);
       break;
     case Tag::JSON_NULL:
-      value_ptr = make_shared<JsonNull>();
+      value_ptr = std::make_shared<JsonNull>();
       break;
     case Tag::JSON_TRUE:
     case Tag::JSON_FALSE:
-      value_ptr = make_shared<JsonBoolean>(value->value<bool>());
+      value_ptr = std::make_shared<JsonBoolean>(value->value<bool>());
       break;
     default:
       break;

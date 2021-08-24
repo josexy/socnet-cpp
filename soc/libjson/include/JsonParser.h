@@ -70,7 +70,7 @@ protected:
         lexer.analysis();
       }
     } catch (JsonError &e) {
-      cout << e.what() << endl;
+      std::cout << e.what() << std::endl;
       exit(-1);
     }
   }

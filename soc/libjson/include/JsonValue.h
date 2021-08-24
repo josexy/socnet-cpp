@@ -3,8 +3,6 @@
 
 #include "JsonToken.h"
 
-using namespace std;
-
 namespace libjson {
 
 enum class JsonType { Object, Array, String, Number, Boolean, Null };

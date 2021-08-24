@@ -13,9 +13,6 @@
 
 namespace libjson {
 
-using std::ifstream;
-using std::string;
-
 class JsonLexer {
 public:
   friend class JsonParser;
@@ -26,7 +23,7 @@ public:
     fprintf(stderr, "%s\n", e.what());
     exit(-1);
   }
-  JsonLexer(ifstream &ifs, bool escape = true) try
+  JsonLexer(std::ifstream &ifs, bool escape = true) try
       : escape(escape), reader(ifs) {
   } catch (std::exception &e) {
     fprintf(stderr, "%s\n", e.what());
@@ -78,8 +75,8 @@ public:
           c = getC();
           if (!is_valid_next_escape_character(c)) {
             throw JsonSyntaxError(lineNumber, start_col,
-                                  "invalid escape character '" + string(1, c) +
-                                      "'");
+                                  "invalid escape character '" +
+                                      std::string(1, c) + "'");
           }
           s.append(1, c);
         }
@@ -226,7 +223,7 @@ public:
       if (c != EOF)
         throw JsonSyntaxError(lineNumber, start_col,
                               "unknown character in a valid json document: " +
-                                  string(1, c));
+                                  std::string(1, c));
     }
   }
 

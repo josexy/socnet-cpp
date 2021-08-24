@@ -1,12 +1,9 @@
 #ifndef LIBJSON_JSONREADER_H
 #define LIBJSON_JSONREADER_H
 
-#include <string.h>
-
-#include <fstream>
-
 #include "JsonError.h"
-
+#include <fstream>
+#include <string.h>
 namespace libjson {
 class JsonReader {
 public:
