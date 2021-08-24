@@ -4,7 +4,6 @@
 
 #include "../../libjson/include/JsonFormatter.h"
 #include "../../libjson/include/JsonParser.h"
-#include "../../net/include/TcpConnection.h"
 #include "HttpRequest.h"
 
 namespace soc {
@@ -13,34 +12,34 @@ namespace http {
 class HttpRequest;
 class HttpResponseBuilder {
 public:
-  explicit HttpResponseBuilder(HttpRequest *request, net::Buffer *sender);
+  explicit HttpResponseBuilder(HttpRequest *request, net::TcpConnection *conn);
 
-  HttpResponseBuilder &version(HttpVersion version) {
+  HttpResponseBuilder &setVersion(HttpVersion version) {
     version_ = version;
     return *this;
   };
 
-  HttpResponseBuilder &keepAlive(bool on) {
+  HttpResponseBuilder &setKeepAlive(bool on) {
     keepalive_ = on;
     return *this;
   }
 
-  HttpResponseBuilder &code(int code) {
+  HttpResponseBuilder &setCode(int code) {
     code_ = code;
     return *this;
   }
 
-  HttpResponseBuilder &header(const HttpHeader &header) {
+  HttpResponseBuilder &setHeader(const HttpHeader &header) {
     header_.add(header);
     return *this;
   }
 
-  HttpResponseBuilder &header(const std::string &key,
-                              const std::string &value) {
+  HttpResponseBuilder &setHeader(const std::string &key,
+                                 const std::string &value) {
     header_.add(key, value);
     return *this;
   }
-  HttpResponseBuilder &cookie(const std::string &value) {
+  HttpResponseBuilder &setCookie(const std::string &value) {
     header_.add("Set-Cookie", value);
     return *this;
   }
@@ -50,20 +49,20 @@ public:
     return *this;
   }
 
-  HttpResponseBuilder &body(const std::string_view &body) {
+  HttpResponseBuilder &setBody(const std::string_view &body) {
     tmp_buffer_.reset();
     appendBody(body);
     return *this;
   }
 
-  HttpResponseBuilder &renderFile(const std::string_view &filename) {
+  HttpResponseBuilder &setBodyFile(const std::string_view &filename) {
     tmp_buffer_.reset();
     file_name_ = filename;
     resp_file_ = true;
     return *this;
   }
 
-  HttpResponseBuilder &renderHtml(const std::string_view &filename) {
+  HttpResponseBuilder &setBodyHtml(const std::string_view &filename) {
     tmp_buffer_.reset();
     file_name_ = filename;
     resp_file_ = true;
@@ -71,30 +70,31 @@ public:
     return *this;
   }
 
-  HttpResponseBuilder &renderJson(libjson::JsonObject *root,
-                                  bool format = true) {
+  HttpResponseBuilder &setBodyJson(libjson::JsonObject *root,
+                                   bool format = true) {
     if (format) {
       libjson::JsonFormatter formatter(4, true);
       formatter.set_source(root);
-      body(formatter.format());
+      setBody(formatter.format());
     } else {
-      body(root->toString());
+      setBody(root->toString());
     }
     header_.add("Content-Type", "application/json; charset=utf-8");
     return *this;
   }
 
-  HttpResponseBuilder &auth(HttpAuthType type);
+  HttpResponseBuilder &setAuthType(HttpAuthType type);
 
-  HttpVersion version() const noexcept { return version_; }
-  int code() const noexcept { return code_; }
-  bool keepAlive() const noexcept { return keepalive_; }
-  const HttpHeader &header() const noexcept { return header_; }
-  std::string_view body() noexcept {
+  HttpVersion getVersion() const noexcept { return version_; }
+  int getCode() const noexcept { return code_; }
+  bool isKeepAlive() const noexcept { return keepalive_; }
+  const HttpHeader &getHeader() const noexcept { return header_; }
+  std::string_view getBody() noexcept {
     return std::string_view(tmp_buffer_.peek(), tmp_buffer_.readable());
   }
 
   void build();
+  net::TcpConnection *connection() const { return conn_; }
 
 private:
   void prepareHeader();
@@ -106,6 +106,7 @@ private:
 
   HttpVersion version_;
   HttpHeader header_;
+  HttpMethod method_;
 
   bool resp_file_;
   bool keepalive_;
@@ -113,7 +114,7 @@ private:
   int code_;
 
   net::Buffer tmp_buffer_;
-  net::Buffer *sender_;
+  net::TcpConnection *conn_;
 };
 
 // HttpResponse
@@ -126,54 +127,59 @@ public:
   ~HttpResponse() {
     if (builder_)
       delete builder_;
+    builder_ = nullptr;
   }
 
-  HttpVersion version() const noexcept { return builder_->version(); }
-  const HttpHeader &header() const noexcept { return builder_->header(); }
-  int code() const noexcept { return builder_->code(); }
+  HttpVersion getVersion() const noexcept { return builder_->getVersion(); }
+  const HttpHeader &getHeader() const noexcept { return builder_->getHeader(); }
+  int getCode() const noexcept { return builder_->getCode(); }
 
-  HttpResponse &version(HttpVersion version) {
-    builder_->version(version);
+  HttpResponse &setContentType(const std::string &content_type) {
+    return setHeader("Content-Type", content_type);
+  }
+  HttpResponse &setVersion(HttpVersion version) {
+    builder_->setVersion(version);
     return *this;
   }
-  HttpResponse &code(int code) {
-    builder_->code(code);
+  HttpResponse &setCode(int code) {
+    builder_->setCode(code);
     return *this;
   }
-  HttpResponse &header(const HttpHeader &header) {
-    builder_->header(header);
+  HttpResponse &setHeader(const HttpHeader &header) {
+    builder_->setHeader(header);
     return *this;
   }
-  HttpResponse &header(const std::string &key, const std::string &value) {
-    builder_->header(key, value);
+  HttpResponse &setHeader(const std::string &key, const std::string &value) {
+    builder_->setHeader(key, value);
     return *this;
   }
-  HttpResponse &cookie(const std::string &value) {
-    builder_->cookie(value);
+  HttpResponse &setCookie(const std::string &value) {
+    builder_->setCookie(value);
     return *this;
   }
-  HttpResponse &cookie(const HttpCookie &cookie) {
-    builder_->cookie(cookie.toString());
+  HttpResponse &setCookie(const HttpCookie &cookie) {
+    builder_->setCookie(cookie.toString());
     return *this;
   }
   HttpResponse &appendBody(const std::string_view &body) {
     builder_->appendBody(body);
     return *this;
   }
-  HttpResponse &body(const std::string_view &body) {
-    builder_->body(body);
+  HttpResponse &setBody(const std::string_view &body) {
+    builder_->setBody(body);
     return *this;
   }
-  HttpResponse &bodyJson(libjson::JsonObject *jsonObject, bool format = true) {
-    builder_->renderJson(jsonObject, format);
+  HttpResponse &setBodyJson(libjson::JsonObject *jsonObject,
+                            bool format = true) {
+    builder_->setBodyJson(jsonObject, format);
     return *this;
   }
-  HttpResponse &bodyHtml(const std::string_view &filename) {
-    builder_->renderHtml(filename);
+  HttpResponse &setBodyHtml(const std::string_view &filename) {
+    builder_->setBodyHtml(filename);
     return *this;
   }
-  HttpResponse &bodyFile(const std::string_view &filename) {
-    builder_->renderFile(filename);
+  HttpResponse &setBodyFile(const std::string_view &filename) {
+    builder_->setBodyFile(filename);
     return *this;
   }
 
@@ -184,7 +190,6 @@ private:
   void send();
 
 private:
-  net::TcpConnection *conn_;
   HttpResponseBuilder *builder_;
 };
 } // namespace http

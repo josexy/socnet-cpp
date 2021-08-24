@@ -4,59 +4,62 @@
 using namespace soc::http;
 
 HttpResponseBuilder::HttpResponseBuilder(HttpRequest *request,
-                                         net::Buffer *sender)
-    : uri_(request->url()), version_(request->version()), resp_file_(false),
+                                         net::TcpConnection *conn)
+    : uri_(request->getUrl()), version_(request->getVersion()),
+      method_(request->getMethod()), resp_file_(false),
       keepalive_(request->isKeepAlive()), compressed_(request->isCompressed()),
-      code_(200), sender_(sender) {
+      code_(HttpStatus::OK), conn_(conn) {
   header_.add("Server", "socnet");
-  header_.add("Content-Type", "text/plain; charset=utf-8");
-  header_.add("Date", soc::net::TimeStamp::serverDate());
-
+  header_.add("Content-Type", "application/octet-stream");
+  header_.add("Date", soc::net::TimeStamp::getServerDate());
   tmp_buffer_.retiredAll();
 }
 
-HttpResponseBuilder &HttpResponseBuilder::auth(HttpAuthType type) {
-  code_ = 401;
+HttpResponseBuilder &HttpResponseBuilder::setAuthType(HttpAuthType type) {
+  static const std::string realm = HttpPassStore::instance().getRealm();
+  code_ = HttpStatus::UNAUTHORIZED;
   char buffer[1024]{0};
   if (type == HttpAuthType::Basic) {
-    ::sprintf(buffer, "Basic realm=\"%s\"", kRealm);
+    ::sprintf(buffer, "Basic realm=\"%s\"", realm.data());
   } else if (type == HttpAuthType::Digest) {
+    char nonce[17]{0}, opaque[17]{0};
+    EncodeUtil::genRandromStr(nonce);
+    EncodeUtil::genRandromStr(opaque);
     ::sprintf(buffer,
               "Digest realm=\"%s\", qop=\"auth,auth-int\", nonce=\"%s\", "
               "opaque=\"%s\"",
-              kRealm,
-              EncodeUtil::base64Encode(EncodeUtil::genRandromStr(16)).data(),
-              EncodeUtil::base64Encode(EncodeUtil::genRandromStr(16)).data());
+              realm.data(), EncodeUtil::base64Encode(nonce).data(),
+              EncodeUtil::base64Encode(opaque).data());
   }
   header_.add("WWW-Authenticate", buffer);
-
+  header_.add("Content-Type", "text/plain; charset=utf-8");
   return *this;
 }
 
 void HttpResponseBuilder::prepareHeader() {
   switch (version_) {
   case HttpVersion::HTTP_1_0:
-    sender_->append("HTTP/1.0 ", 9);
+    conn_->getSender()->append("HTTP/1.0 ", 9);
     break;
   case HttpVersion::HTTP_1_1:
-    sender_->append("HTTP/1.1 ", 9);
+    conn_->getSender()->append("HTTP/1.1 ", 9);
     break;
   case HttpVersion::HTTP_2_0:
-    sender_->append("HTTP/2.0 ", 9);
+    conn_->getSender()->append("HTTP/2.0 ", 9);
     break;
   default:
     break;
   }
 
   std::string code = std::to_string(code_) + " ";
-  sender_->append(code.c_str(), code.size());
+  conn_->getSender()->append(code.c_str(), code.size());
 
   std::string_view message = Status_Code.at(code_);
-  sender_->append(message.data(), message.size());
-  sender_->append("\r\n", 2);
+  conn_->getSender()->append(message.data(), message.size());
+  conn_->getSender()->append("\r\n", 2);
 
-  header_.store(sender_);
-  sender_->append("\r\n", 2);
+  header_.store(conn_->getSender());
+  conn_->getSender()->append("\r\n", 2);
 }
 
 void HttpResponseBuilder::makeHeaderPart(size_t content_length) {
@@ -92,46 +95,83 @@ void HttpResponseBuilder::build() {
     compressed_ = false;
   }
 
-  std::string_view sv;
-  if (resp_file_)
-    sv = FileUtil(file_name_).readAll(&tmp_buffer_);
-  else
-    sv = std::string_view(tmp_buffer_.peek(), tmp_buffer_.readable());
+  std::pair<char *, size_t> sv;
+  bool putinto_buf = true;
+  if (resp_file_) {
+    int infd = FileUtil::openFile(file_name_);
+    struct stat st;
+    ::fstat(infd, &st);
+    long size = st.st_size;
+    char mtime[50]{0};
+    ::strftime(mtime, 50, "%a, %d %b %Y %H:%M:%S GMT", ::gmtime(&st.st_mtime));
+    setHeader("Last-Modified", mtime);
+
+    // sendfile()
+    // not support dynamic gzip
+    if (conn_->getChannel()->supportSendFile()) {
+      conn_->getChannel()->createSendFileObject(infd, size);
+      compressed_ = false;
+      putinto_buf = false;
+      sv = std::make_pair(nullptr, size);
+    } else {
+      // 4M
+      constexpr static size_t M = 4 * 1024 * 1024;
+      // read()
+      if (size <= M) {
+        tmp_buffer_.ensureWritable(size);
+        FileUtil::read(infd, tmp_buffer_.beginWrite(), size);
+        FileUtil::closeFile(infd);
+        tmp_buffer_.hasWritten(size);
+        sv = std::make_pair(tmp_buffer_.beginRead(), tmp_buffer_.readable());
+      } else {
+        // mmap()
+        const auto x = conn_->getChannel()->createMMapObject(infd, size);
+        FileUtil::closeFile(infd);
+        sv = std::make_pair(x->getAddress(), size);
+        putinto_buf = false;
+      }
+    }
+  } else {
+    sv = std::make_pair(tmp_buffer_.beginRead(), tmp_buffer_.readable());
+  }
 
   std::vector<uint8_t> out;
-  if (compressed_) {
+  if (compressed_ && sv.second) {
+    // sendfile() not support gzip compress
     header_.add("Content-Encoding", "gzip");
-    EncodeUtil::gzipCompress(sv, out);
-    makeHeaderPart(out.size());
-  } else
-    makeHeaderPart(sv.size());
+    EncodeUtil::gzipCompress(std::string_view(sv.first, sv.second), out);
+    sv.second = out.size();
+  }
 
+  makeHeaderPart(sv.second);
   prepareHeader();
+  // HEAD method
+  if (method_ == HttpMethod::HEAD)
+    return;
+
   if (compressed_) {
-    sender_->append<uint8_t>(out.begin(), out.end());
-  } else {
-    if (tmp_buffer_.mappingAddr()) {
-      sender_->appendMapping(sv);
-      tmp_buffer_.appendMapping(nullptr, 0);
-    } else
-      sender_->append(sv);
+    conn_->getSender()->append<uint8_t>(out.begin(), out.end());
+    // If use mmap() and the mmap file data is compressed, delete the mmap
+    // object in the channel
+    conn_->getChannel()->removeMMapObject();
+  } else if (putinto_buf) {
+    conn_->getSender()->append(sv.first, sv.second);
   }
 }
 
 HttpResponse::HttpResponse(net::TcpConnection *conn)
-    : conn_(conn),
-      builder_(new HttpResponseBuilder(
-          static_cast<HttpRequest *>(conn->context()), conn->sender())) {}
+    : builder_(new HttpResponseBuilder(
+          static_cast<HttpRequest *>(conn->getContext()), conn)) {}
 
-void HttpResponse::sendAuth(HttpAuthType type) { builder_->auth(type); }
+void HttpResponse::sendAuth(HttpAuthType type) { builder_->setAuthType(type); }
 
 void HttpResponse::sendRedirect(const std::string &url) {
-  this->code(302).header("Location", url);
+  this->setCode(HttpStatus::FOUND).setHeader("Location", url);
 }
 
 void HttpResponse::send() {
-  if (conn_ == nullptr)
+  if (builder_->connection() == nullptr)
     return;
-  conn_->setKeepAlive(builder_->keepAlive());
+  builder_->connection()->setKeepAlive(builder_->isKeepAlive());
   builder_->build();
 }

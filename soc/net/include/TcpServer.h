@@ -19,11 +19,13 @@ public:
   TcpServer();
   ~TcpServer();
 
-  InetAddress address() const { return option::sockname(svr_socket_->fd()); }
+  InetAddress getInetAddress() {
+    return option::getSockName(svr_socket_->getFd());
+  }
 
   void start(const InetAddress &address);
   void quit();
-  void wakeup();
+  void wakeUp();
 
   void setIdleTime(int millsecond) { idle_timeout_ = millsecond; }
 
@@ -65,6 +67,7 @@ private:
   int evfd_;
   int idle_timeout_;
   std::atomic<bool> quit_;
+  bool sendfile_;
 
   std::unique_ptr<ServerSocket> svr_socket_;
   std::unique_ptr<EPoller> poller_;
