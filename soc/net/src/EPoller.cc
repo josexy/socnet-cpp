@@ -43,15 +43,15 @@ bool EPoller::poll() {
     int fd = events_[i].data.fd;
     int revents = events_[i].events;
 
-    if (revents & EPOLLIN) {
+    if (revents & (EPOLLERR | EPOLLRDHUP | EPOLLHUP)) {
+      if (close_cb_)
+        close_cb_(fd);
+    } else if (revents & EPOLLIN) {
       if (read_cb_)
         read_cb_(fd);
     } else if (revents & EPOLLOUT) {
       if (write_cb_)
         write_cb_(fd);
-    } else if (revents & (EPOLLERR | EPOLLRDHUP | EPOLLHUP)) {
-      if (close_cb_)
-        close_cb_(fd);
     }
   }
   return true;
