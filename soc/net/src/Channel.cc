@@ -31,8 +31,6 @@ int SslChannel::read() {
   return n;
 }
 
-#include "../../utility/include/Logger.h"
-
 int SslChannel::write(bool *cflag) {
   // OpenSSL not support sendfile!
   // 1. writev(buffer)
