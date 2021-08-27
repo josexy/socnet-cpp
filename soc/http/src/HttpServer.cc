@@ -59,7 +59,8 @@ void HttpServer::setCertificate(const std::string &cert_file,
 HttpSession *HttpServer::createSession() {
   char id[16], session_id[27]{0};
   EncodeUtil::genRandromStr(id);
-  ::sprintf(session_id, "SESSIONID_%s", id);
+  ::snprintf(session_id, 27, "SESSIONID_%s", id);
+  session_id[26] = '\0';
   static const int interval = GET_CONFIG(int, "server", "session_lifetime");
   HttpSession *session = new HttpSession(session_id, interval);
   sessions_.add(session_id, std::shared_ptr<HttpSession>(session));
