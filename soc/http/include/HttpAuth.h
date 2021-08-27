@@ -70,7 +70,7 @@ public:
 
     // h2
     ::memset(buffer, 0, 128);
-    ::sprintf(buffer, "%s:%s", method.value().data(), uri.value().data());
+    ::snprintf(buffer, 128, "%s:%s", method.value().data(), uri.value().data());
     std::string h2 = EncodeUtil::md5Hash(buffer);
 
     // resp
