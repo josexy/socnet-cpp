@@ -18,7 +18,7 @@ public:
   explicit JsonReader(std::ifstream &ifs) {
     char c;
     std::string s;
-    while (~(c = ifs.get()))
+    while (ifs >> c) // fix bug
       s += c;
     if (s.empty())
       throw JsonError("Empty json document");

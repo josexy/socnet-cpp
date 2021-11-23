@@ -219,11 +219,6 @@ public:
       return token_list.push_back(std::make_shared<Float>(
           toAny<double>(s), lineNumber, start_col, s.length()));
     } else {
-      // For other characters, treat them as exceptions here
-      if (c != EOF)
-        throw JsonSyntaxError(lineNumber, start_col,
-                              "unknown character in a valid json document: " +
-                                  std::string(1, c));
     }
   }
 
