@@ -5,7 +5,7 @@
         "idle_timeout": 2000,
         "server_hostname": "localhost",
         "enable_https": false,
-        "enable_php": true,
+        "enable_php": false,
         "enable_sendfile": false,
         "default_page": [
             "index.php",
