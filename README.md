@@ -1,7 +1,9 @@
 # socnet-cpp(socket of c++)
 A high performance HTTP server based on linux epoll designed by C++ 20
 
-用C++20实现的基于linux epoll高性能简单HTTP服务器，用于学习目的。
+用C++20实现的基于linux epoll高性能简单HTTP服务器，可在docker容器中运行，仅仅用于学习。
+
+目前GitHub有很多使用C++实现的Web服务器，本人使用C++造轮子主要是从底层理解高性能Web服务器的实现以及如何分模块构建一个小型项目。
 
 特点:
 - 模块化设计，分而治之
@@ -69,7 +71,7 @@ int main() {
         "idle_timeout": 2000,
         "server_hostname": "localhost",
         "enable_https": false,
-        "enable_php": true,
+        "enable_php": false,
         "enable_sendfile": false,
         "default_page": [
             "index.php",
@@ -94,3 +96,18 @@ int main() {
 ```
 
 PS: 可能需要修改php-fpm配置文件中 `user` 和 `group` 为当前用户名。
+
+## Docker 
+该项目可在docker中运行：
+```shell
+# 构建
+docker build -t web-socnet:v1 .
+# 创建并运行容器
+docker run -itd --rm --name socnet -p 8080:5555 web-socnet:v1
+# 访问
+curl 127.0.0.1:8080
+# 进入容器
+docker exec -it socnet /bin/bash
+# 停止容器
+docker stop socnet
+```
